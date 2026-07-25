@@ -1,0 +1,6 @@
+@Mobility_HostAddress = http://localhost:5169
+
+GET {{Mobility_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

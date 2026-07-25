@@ -1,0 +1,1256 @@
+openapi: 3.1.0
+info:
+  title: Mobility Operational Dashboard Renderer API
+  version: 1.0.0-review
+  description: |
+    Contract-review specification for Current Opp All Followups, followed by
+    Opportunity Follow-Up, Work Done, and Task Status. UniversalAuto MIS is
+    outside this contract. No business or database implementation is approved
+    by this document.
+servers:
+  - url: https://mobility-api.example.invalid
+    description: Placeholder only; deployment URL is not part of this review.
+security:
+  - bearerAuth: []
+tags:
+  - name: Dashboard definitions
+  - name: Dashboard data
+  - name: Dashboard actions
+  - name: Dashboard attachments
+paths:
+  /api/v1/dashboards/{screenId}/definition:
+    get:
+      tags:
+        - Dashboard definitions
+      operationId: getDashboardDefinition
+      summary: Get a compatible published dashboard definition
+      parameters:
+        - $ref: '#/components/parameters/ScreenId'
+        - $ref: '#/components/parameters/Platform'
+        - $ref: '#/components/parameters/RendererVersion'
+        - name: capability
+          in: query
+          description: Repeat for each compiled client capability.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: If-None-Match
+          in: header
+          schema:
+            type:
+              - string
+              - 'null'
+      responses:
+        '200':
+          description: Compatible published definition.
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDefinitionResponse'
+              examples:
+                currentOppAllFollowups:
+                  $ref: '#/components/examples/CurrentOppDefinition'
+        '304':
+          description: The cached definition is current.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Renderer version or required capabilities are incompatible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/DashboardProblemDetails'
+              examples:
+                rendererIncompatible:
+                  $ref: '#/components/examples/RendererIncompatible'
+  /api/v1/dashboards/{dashboardCode}/rows:
+    post:
+      tags:
+        - Dashboard data
+      operationId: queryDashboardRows
+      summary: Query normalized rows through a whitelisted data source
+      parameters:
+        - $ref: '#/components/parameters/DashboardCode'
+        - $ref: '#/components/parameters/DefinitionVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardRowsRequest'
+            examples:
+              currentOppAllFollowups:
+                $ref: '#/components/examples/CurrentOppRowsRequest'
+      responses:
+        '200':
+          description: Normalized dashboard rows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardRowsResponse'
+              examples:
+                currentOppAllFollowups:
+                  $ref: '#/components/examples/CurrentOppRowsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/dashboards/{dashboardCode}/filters/{filterKey}/options:
+    get:
+      tags:
+        - Dashboard data
+      operationId: getDashboardFilterOptions
+      summary: Load typed options through a whitelisted option source
+      description: |
+        Required for Work Done dynamic filters. Raw legacy DataSource and
+        FilterClause values never cross this API boundary.
+      parameters:
+        - $ref: '#/components/parameters/DashboardCode'
+        - $ref: '#/components/parameters/FilterKey'
+        - $ref: '#/components/parameters/DefinitionVersion'
+        - name: search
+          in: query
+          schema:
+            type:
+              - string
+              - 'null'
+            maxLength: 100
+        - name: cursor
+          in: query
+          schema:
+            type:
+              - string
+              - 'null'
+      responses:
+        '200':
+          description: Typed filter options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardFilterOptionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/dashboards/{dashboardCode}/actions/{actionCode}:
+    post:
+      tags:
+        - Dashboard actions
+      operationId: executeDashboardAction
+      summary: Execute a registered action for an authorized row
+      parameters:
+        - $ref: '#/components/parameters/DashboardCode'
+        - $ref: '#/components/parameters/ActionCode'
+        - $ref: '#/components/parameters/DefinitionVersion'
+        - name: Idempotency-Key
+          in: header
+          description: Required for mutating action registrations.
+          schema:
+            type:
+              - string
+              - 'null'
+            minLength: 16
+            maxLength: 100
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DashboardActionRequest'
+      responses:
+        '200':
+          description: Action result and a closed client effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardActionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/dashboards/{dashboardCode}/attachments:
+    get:
+      tags:
+        - Dashboard attachments
+      operationId: getDashboardAttachments
+      summary: Get fresh CR01/GN25 attachment metadata for a document
+      parameters:
+        - $ref: '#/components/parameters/DashboardCode'
+        - name: sourceType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - CR01
+              - GN25
+        - name: documentGuid
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+      responses:
+        '200':
+          description: Attachment summary/details. Failure is isolated from rows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardAttachmentsResponse'
+              examples:
+                currentOppAllFollowups:
+                  $ref: '#/components/examples/CurrentOppAttachments'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ScreenId:
+      name: screenId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 150
+    DashboardCode:
+      name: dashboardCode
+      in: path
+      required: true
+      description: Opaque whitelist key, never an executable target.
+      schema:
+        type: string
+        pattern: '^[A-Z0-9_]{3,100}$'
+    FilterKey:
+      name: filterKey
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z][A-Za-z0-9_]{0,99}$'
+    ActionCode:
+      name: actionCode
+      in: path
+      required: true
+      description: Opaque whitelist key registered for this dashboard.
+      schema:
+        type: string
+        pattern: '^[A-Z0-9_]{3,100}$'
+    Platform:
+      name: platform
+      in: query
+      required: true
+      schema:
+        $ref: '#/components/schemas/ClientPlatform'
+    RendererVersion:
+      name: rendererVersion
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    DefinitionVersion:
+      name: X-Dashboard-Definition-Version
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+  responses:
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/DashboardProblemDetails'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/DashboardProblemDetails'
+    Forbidden:
+      description: The authenticated caller cannot access this operation or row.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/DashboardProblemDetails'
+    NotFound:
+      description: Dashboard, definition, row, action, or attachment was not found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/DashboardProblemDetails'
+    Conflict:
+      description: Definition or row version changed, or compatibility failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/DashboardProblemDetails'
+  schemas:
+    ClientPlatform:
+      type: string
+      enum:
+        - android
+        - ios
+        - web
+        - macos
+        - windows
+    DashboardRequestContext:
+      type: object
+      additionalProperties: false
+      required:
+        - platform
+        - rendererVersion
+        - capabilities
+      properties:
+        actingUserId:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        branchId:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        financialYearId:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        platform:
+          $ref: '#/components/schemas/ClientPlatform'
+        rendererVersion:
+          type: integer
+          minimum: 1
+        capabilities:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items:
+            type: string
+            maxLength: 100
+        locale:
+          type:
+            - string
+            - 'null'
+          maxLength: 35
+        timeZone:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+    DashboardFallback:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - screenId
+      properties:
+        mode:
+          type: string
+          const: legacyScreen
+        screenId:
+          type: string
+        reason:
+          type:
+            - string
+            - 'null'
+    DashboardDefinitionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - screenId
+        - dashboardCode
+        - title
+        - definitionVersion
+        - rendererSchemaVersion
+        - minRendererVersion
+        - requiredCapabilities
+        - dataSourceCode
+        - etag
+        - fallback
+        - definition
+      properties:
+        screenId:
+          type: string
+        dashboardCode:
+          type: string
+        title:
+          type: string
+        definitionVersion:
+          type: string
+        rendererSchemaVersion:
+          type: integer
+          minimum: 1
+        minRendererVersion:
+          type: integer
+          minimum: 1
+        requiredCapabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        dataSourceCode:
+          type: string
+        etag:
+          type: string
+        fallback:
+          $ref: '#/components/schemas/DashboardFallback'
+        definition:
+          $ref: '#/components/schemas/DashboardDefinition'
+    DashboardDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - layout
+        - rowIdentityField
+        - filters
+        - card
+        - actions
+      properties:
+        layout:
+          type: string
+          enum:
+            - groupedCardList
+            - cardList
+        rowIdentityField:
+          type: string
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardFilterDefinition'
+        grouping:
+          oneOf:
+            - $ref: '#/components/schemas/DashboardGrouping'
+            - type: 'null'
+        summary:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardSummary'
+        card:
+          $ref: '#/components/schemas/DashboardCardDefinition'
+        attachments:
+          oneOf:
+            - $ref: '#/components/schemas/DashboardAttachmentDefinition'
+            - type: 'null'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardActionDefinition'
+    DashboardFilterDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - label
+        - controlType
+        - valueType
+        - required
+        - displayOrder
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        controlType:
+          type: string
+          enum:
+            - date
+            - text
+            - number
+            - checkbox
+            - singleSelect
+        valueType:
+          type: string
+          enum:
+            - string
+            - date
+            - number
+            - boolean
+        field:
+          type:
+            - string
+            - 'null'
+        searchFields:
+          type: array
+          items:
+            type: string
+        optionsMode:
+          type:
+            - string
+            - 'null'
+          enum:
+            - distinctFromRows
+            - optionSource
+            - null
+        optionSourceCode:
+          type:
+            - string
+            - 'null'
+        defaultValue:
+          description: Typed default value. Dates use full-date strings.
+        required:
+          type: boolean
+        displayOrder:
+          type: integer
+          minimum: 0
+    DashboardGrouping:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - label
+        - emptyValue
+        - sort
+        - initiallyCollapsed
+        - showCount
+      properties:
+        field:
+          type: string
+        label:
+          type: string
+        emptyValue:
+          type: string
+        sort:
+          type: string
+          enum:
+            - alphaAsc
+            - alphaDesc
+            - source
+        initiallyCollapsed:
+          type: boolean
+        showCount:
+          type: boolean
+    DashboardSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - label
+        - type
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum:
+            - filteredCountOverTotal
+            - countByField
+        field:
+          type:
+            - string
+            - 'null'
+    DashboardCardDefinition:
+      type: object
+      additionalProperties: true
+      required:
+        - template
+        - titleField
+        - fields
+      properties:
+        template:
+          type: string
+          enum:
+            - followupOpportunity
+            - workDone
+            - taskStatus
+        titleField:
+          type: string
+        badge:
+          type:
+            - object
+            - 'null'
+        tone:
+          type:
+            - object
+            - 'null'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardCardField'
+    DashboardCardField:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - section
+        - fields
+        - displayOrder
+      properties:
+        code:
+          type: string
+        section:
+          type: string
+          enum:
+            - body
+            - amount
+            - footer
+        label:
+          type:
+            - string
+            - 'null'
+        iconCode:
+          type:
+            - string
+            - 'null'
+        fields:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        prefixes:
+          type: object
+          additionalProperties:
+            type: string
+        joinWith:
+          type:
+            - string
+            - 'null'
+        valueType:
+          type:
+            - string
+            - 'null'
+        displayOrder:
+          type: integer
+          minimum: 0
+    DashboardAttachmentDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - documentGuidField
+        - loadMode
+        - openActionCode
+      properties:
+        enabled:
+          type: boolean
+        sourceType:
+          type:
+            - string
+            - 'null'
+        sourceTypeField:
+          type:
+            - string
+            - 'null'
+        documentGuidField:
+          type: string
+        declaredCountField:
+          type:
+            - string
+            - 'null'
+        loadMode:
+          type: string
+          enum:
+            - supplementaryFreshRequest
+        openActionCode:
+          type: string
+    DashboardActionDefinition:
+      type: object
+      additionalProperties: true
+      required:
+        - actionCode
+        - label
+        - kind
+        - successEffect
+      properties:
+        actionCode:
+          type: string
+        label:
+          type: string
+        kind:
+          type: string
+          enum:
+            - clientNavigation
+            - clientDialog
+            - serverAction
+        navigationCode:
+          type:
+            - string
+            - 'null'
+        trigger:
+          type:
+            - string
+            - 'null'
+        placement:
+          type:
+            - string
+            - 'null'
+        successEffect:
+          type: string
+          enum:
+            - none
+            - refreshDashboard
+            - refreshRow
+            - localRowPatch
+            - clientNavigation
+            - refreshDashboardWhenChildReturnsTrue
+    DashboardSort:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - direction
+      properties:
+        field:
+          type: string
+        direction:
+          type: string
+          enum:
+            - asc
+            - desc
+    PageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - number
+        - size
+      properties:
+        number:
+          type: integer
+          minimum: 1
+        size:
+          type: integer
+          minimum: 1
+          maximum: 200
+    PageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - number
+        - size
+        - hasMore
+      properties:
+        number:
+          type: integer
+          minimum: 1
+        size:
+          type: integer
+          minimum: 1
+        hasMore:
+          type: boolean
+    DashboardRowsRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - filters
+        - sort
+        - context
+        - page
+      properties:
+        filters:
+          type: object
+          additionalProperties: true
+        sort:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardSort'
+        context:
+          $ref: '#/components/schemas/DashboardRequestContext'
+        page:
+          $ref: '#/components/schemas/PageRequest'
+    DashboardRowsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - dashboardCode
+        - definitionVersion
+        - dataRevision
+        - totalCount
+        - returnedCount
+        - rows
+        - page
+      properties:
+        dashboardCode:
+          type: string
+        definitionVersion:
+          type: string
+        dataRevision:
+          type: string
+        totalCount:
+          type: integer
+          minimum: 0
+        returnedCount:
+          type: integer
+          minimum: 0
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/NormalizedDashboardRow'
+        page:
+          $ref: '#/components/schemas/PageResponse'
+    NormalizedDashboardRow:
+      type: object
+      additionalProperties: false
+      required:
+        - rowKey
+        - values
+        - commands
+      properties:
+        rowKey:
+          type: string
+        rowVersion:
+          type:
+            - string
+            - 'null'
+        values:
+          type: object
+          additionalProperties: true
+        attachmentRef:
+          oneOf:
+            - $ref: '#/components/schemas/DashboardAttachmentRef'
+            - type: 'null'
+        commands:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardRowCommand'
+    DashboardAttachmentRef:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceType
+        - documentGuid
+        - declaredCount
+      properties:
+        sourceType:
+          type: string
+        documentGuid:
+          type: string
+        declaredCount:
+          type: integer
+          minimum: 0
+    DashboardRowCommand:
+      type: object
+      additionalProperties: false
+      required:
+        - actionCode
+        - enabled
+      properties:
+        actionCode:
+          type: string
+        enabled:
+          type: boolean
+        disabledReason:
+          type:
+            - string
+            - 'null'
+    DashboardFilterOptionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - dashboardCode
+        - definitionVersion
+        - filterKey
+        - options
+      properties:
+        dashboardCode:
+          type: string
+        definitionVersion:
+          type: string
+        filterKey:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardFilterOption'
+        nextCursor:
+          type:
+            - string
+            - 'null'
+    DashboardFilterOption:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - label
+        - disabled
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        populationRef:
+          type:
+            - string
+            - 'null'
+        disabled:
+          type: boolean
+    DashboardActionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - rowKey
+        - inputs
+        - context
+      properties:
+        rowKey:
+          type: string
+        rowVersion:
+          type:
+            - string
+            - 'null'
+        inputs:
+          type: object
+          additionalProperties: true
+        context:
+          $ref: '#/components/schemas/DashboardRequestContext'
+    DashboardActionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - success
+        - message
+        - clientEffect
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        newRowVersion:
+          type:
+            - string
+            - 'null'
+        clientEffect:
+          $ref: '#/components/schemas/DashboardClientEffect'
+    DashboardClientEffect:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - none
+            - refreshDashboard
+            - refreshRow
+            - localRowPatch
+            - clientNavigation
+        rowPatch:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
+        navigationCode:
+          type:
+            - string
+            - 'null'
+        arguments:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
+    DashboardAttachmentsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - dashboardCode
+        - sourceType
+        - documentGuid
+        - declaredCount
+        - returnedCount
+        - attachments
+      properties:
+        dashboardCode:
+          type: string
+        sourceType:
+          type: string
+        documentGuid:
+          type: string
+        declaredCount:
+          type: integer
+          minimum: 0
+        returnedCount:
+          type: integer
+          minimum: 0
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardAttachment'
+    DashboardAttachment:
+      type: object
+      additionalProperties: false
+      required:
+        - screenId
+        - attachmentId
+        - sourceType
+        - documentGuid
+        - fileName
+        - canPreview
+        - canDownload
+      properties:
+        screenId:
+          type: string
+        attachmentId:
+          type: string
+        sourceType:
+          type: string
+        documentGuid:
+          type: string
+        fileName:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        contentType:
+          type:
+            - string
+            - 'null'
+        sizeBytes:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        serialNumber:
+          type:
+            - integer
+            - 'null'
+        createdAtUtc:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        canPreview:
+          type: boolean
+        canDownload:
+          type: boolean
+    DashboardProblemDetails:
+      type: object
+      additionalProperties: true
+      required:
+        - title
+        - status
+        - code
+        - traceId
+        - retryable
+      properties:
+        type:
+          type:
+            - string
+            - 'null'
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type:
+            - string
+            - 'null'
+        instance:
+          type:
+            - string
+            - 'null'
+          format: uri-reference
+        code:
+          type: string
+        traceId:
+          type: string
+        retryable:
+          type: boolean
+        fallback:
+          oneOf:
+            - $ref: '#/components/schemas/DashboardFallback'
+            - type: 'null'
+        errors:
+          type:
+            - object
+            - 'null'
+          additionalProperties:
+            type: array
+            items:
+              type: string
+  examples:
+    CurrentOppDefinition:
+      summary: Current Opp All Followups POC definition
+      value:
+        screenId: CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID
+        dashboardCode: CSPL_CURRENT_OPP_ALL_FOLLOWUPS
+        title: Current Opp All Followups
+        definitionVersion: 1.0.0
+        rendererSchemaVersion: 1
+        minRendererVersion: 1
+        requiredCapabilities:
+          - groupedCardList
+          - dropdownFilter
+          - textSearch
+          - dateProximityTone
+          - attachmentDialog
+          - clientNavigation
+        dataSourceCode: CSPL_CURRENT_OPP_ALL_FOLLOWUPS_DATA
+        etag: '"current-opp-all-followups-1.0.0-7f4a4e0f"'
+        fallback:
+          mode: legacyScreen
+          screenId: CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID
+          reason: Use the existing dashboard when incompatible.
+        definition:
+          layout: groupedCardList
+          rowIdentityField: targetId
+          filters: []
+          grouping:
+            field: stageLabel
+            label: Stage
+            emptyValue: Unassigned Stage
+            sort: alphaAsc
+            initiallyCollapsed: true
+            showCount: true
+          summary: []
+          card:
+            template: followupOpportunity
+            titleField: customerName
+            fields: []
+          attachments:
+            enabled: true
+            sourceType: CR01
+            documentGuidField: attachmentDocumentGuid
+            declaredCountField: attachmentCount
+            loadMode: supplementaryFreshRequest
+            openActionCode: OPEN_ATTACHMENTS
+          actions: []
+    CurrentOppRowsRequest:
+      summary: Current Opp search request
+      value:
+        filters:
+          customer: ''
+          salesPerson: ''
+          agent: ''
+          search: fleet
+        sort: []
+        context:
+          actingUserId: null
+          branchId: BR-01
+          financialYearId: FY-2026
+          platform: web
+          rendererVersion: 1
+          capabilities:
+            - groupedCardList
+            - dropdownFilter
+            - textSearch
+            - dateProximityTone
+            - attachmentDialog
+            - clientNavigation
+          locale: en-IN
+          timeZone: Asia/Kolkata
+        page:
+          number: 1
+          size: 50
+    CurrentOppRowsResponse:
+      summary: One normalized Current Opp row
+      value:
+        dashboardCode: CSPL_CURRENT_OPP_ALL_FOLLOWUPS
+        definitionVersion: 1.0.0
+        dataRevision: '2026-07-25T10:45:12.124Z'
+        totalCount: 1
+        returnedCount: 1
+        rows:
+          - rowKey: OPP-1001
+            rowVersion: null
+            values:
+              targetId: OPP-1001
+              customerName: Apex Motors
+              docNo: CR01-1001
+              stageLabel: Negotiation
+              followUpDate: '2026-07-28'
+              followUpDateLabel: 28/07/2026 Tuesday
+              actionPlanText: Call purchase manager and confirm demo feedback.
+              opportunityDescription: Fleet renewal discussion for 12 vehicles.
+              salesPersonName: Ravi Kumar
+              agentName: Neha Shah
+              attachmentDocumentGuid: opp-guid-1001
+              attachmentCount: 1
+              templateVariant: '1'
+            attachmentRef:
+              sourceType: CR01
+              documentGuid: opp-guid-1001
+              declaredCount: 1
+            commands:
+              - actionCode: OPEN_OPPORTUNITY
+                enabled: true
+              - actionCode: OPEN_ATTACHMENTS
+                enabled: true
+        page:
+          number: 1
+          size: 50
+          hasMore: false
+    CurrentOppAttachments:
+      summary: Current Opp CR01 attachment metadata
+      value:
+        dashboardCode: CSPL_CURRENT_OPP_ALL_FOLLOWUPS
+        sourceType: CR01
+        documentGuid: opp-guid-1001
+        declaredCount: 1
+        returnedCount: 1
+        attachments:
+          - screenId: 4EF73BB5_628E_4A20_8F17_5C89B7C01502
+            attachmentId: ATT-1001
+            sourceType: CR01
+            documentGuid: opp-guid-1001
+            fileName: opportunity-discussion.pdf
+            description: Commercial discussion
+            contentType: application/pdf
+            sizeBytes: 152400
+            serialNumber: 1
+            createdAtUtc: '2026-07-24T08:15:00Z'
+            canPreview: true
+            canDownload: true
+    RendererIncompatible:
+      summary: Client must use the declared legacy fallback
+      value:
+        type: https://api.example.invalid/problems/renderer-incompatible
+        title: Renderer is incompatible with this dashboard definition.
+        status: 409
+        detail: Renderer version 1 does not support required capability dateProximityTone.
+        instance: /api/v1/dashboards/CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID/definition
+        code: renderer_incompatible
+        traceId: 00-7b92d258fc2f0e2df1188812136f4bb2-2d74bfe343832f8c-01
+        retryable: false
+        fallback:
+          mode: legacyScreen
+          screenId: CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID
+

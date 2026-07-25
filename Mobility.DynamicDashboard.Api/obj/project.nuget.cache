@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "/rzN67PPhfU=",
+  "success": true,
+  "projectFilePath": "/Users/coral/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj",
+  "expectedPackageFiles": [
+    "/Users/coral/.nuget/packages/dapper/2.1.79/dapper.2.1.79.nupkg.sha512",
+    "/Users/coral/.nuget/packages/microsoft.aspnetcore.openapi/10.0.8/microsoft.aspnetcore.openapi.10.0.8.nupkg.sha512",
+    "/Users/coral/.nuget/packages/microsoft.openapi/2.7.5/microsoft.openapi.2.7.5.nupkg.sha512",
+    "/Users/coral/.nuget/packages/swashbuckle.aspnetcore.swaggerui/10.1.0/swashbuckle.aspnetcore.swaggerui.10.1.0.nupkg.sha512"
+  ],
+  "logs": []
+}

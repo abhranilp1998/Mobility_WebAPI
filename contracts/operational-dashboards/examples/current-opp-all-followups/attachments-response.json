@@ -1,0 +1,24 @@
+{
+  "dashboardCode": "CSPL_CURRENT_OPP_ALL_FOLLOWUPS",
+  "sourceType": "CR01",
+  "documentGuid": "opp-guid-1001",
+  "declaredCount": 1,
+  "returnedCount": 1,
+  "attachments": [
+    {
+      "screenId": "4EF73BB5_628E_4A20_8F17_5C89B7C01502",
+      "attachmentId": "ATT-1001",
+      "sourceType": "CR01",
+      "documentGuid": "opp-guid-1001",
+      "fileName": "opportunity-discussion.pdf",
+      "description": "Commercial discussion",
+      "contentType": "application/pdf",
+      "sizeBytes": 152400,
+      "serialNumber": 1,
+      "createdAtUtc": "2026-07-24T08:15:00Z",
+      "canPreview": true,
+      "canDownload": true
+    }
+  ]
+}
+

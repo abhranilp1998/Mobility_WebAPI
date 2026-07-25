@@ -1,0 +1,55 @@
+{
+  "dashboardCode": "CSPL_CURRENT_OPP_ALL_FOLLOWUPS",
+  "definitionVersion": "1.0.0",
+  "dataRevision": "2026-07-25T10:45:12.124Z",
+  "totalCount": 1,
+  "returnedCount": 1,
+  "rows": [
+    {
+      "rowKey": "OPP-1001",
+      "rowVersion": null,
+      "values": {
+        "targetId": "OPP-1001",
+        "customerName": "Apex Motors",
+        "docNo": "CR01-1001",
+        "stageLabel": "Negotiation",
+        "followUpDate": "2026-07-28",
+        "followUpDateLabel": "28/07/2026 Tuesday",
+        "actionPlanText": "Call purchase manager and confirm demo feedback.",
+        "opportunityDescription": "Fleet renewal discussion for 12 vehicles.",
+        "salesPersonId": "SP-01",
+        "salesPersonName": "Ravi Kumar",
+        "agentId": "AG-07",
+        "agentName": "Neha Shah",
+        "contactText": "Amit Patel | 9876543210 | amit@example.com",
+        "address": "Ahmedabad",
+        "quoteAmount": 1850000,
+        "orderAmount": 0,
+        "attachmentDocumentGuid": "opp-guid-1001",
+        "attachmentCount": 1,
+        "templateVariant": "1"
+      },
+      "attachmentRef": {
+        "sourceType": "CR01",
+        "documentGuid": "opp-guid-1001",
+        "declaredCount": 1
+      },
+      "commands": [
+        {
+          "actionCode": "OPEN_OPPORTUNITY",
+          "enabled": true
+        },
+        {
+          "actionCode": "OPEN_ATTACHMENTS",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "page": {
+    "number": 1,
+    "size": 50,
+    "hasMore": false
+  }
+}
+

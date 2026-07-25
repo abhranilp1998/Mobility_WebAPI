@@ -1,0 +1,221 @@
+{
+  "screenId": "CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID",
+  "dashboardCode": "CSPL_CURRENT_OPP_ALL_FOLLOWUPS",
+  "title": "Current Opp All Followups",
+  "definitionVersion": "1.0.0",
+  "rendererSchemaVersion": 1,
+  "minRendererVersion": 1,
+  "requiredCapabilities": [
+    "groupedCardList",
+    "dropdownFilter",
+    "textSearch",
+    "dateProximityTone",
+    "attachmentDialog",
+    "clientNavigation"
+  ],
+  "dataSourceCode": "CSPL_CURRENT_OPP_ALL_FOLLOWUPS_DATA",
+  "etag": "\"current-opp-all-followups-1.0.0-7f4a4e0f\"",
+  "fallback": {
+    "mode": "legacyScreen",
+    "screenId": "CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID",
+    "reason": "Use the existing dashboard when the renderer is incompatible or the POC is disabled."
+  },
+  "definition": {
+    "layout": "groupedCardList",
+    "rowIdentityField": "targetId",
+    "filters": [
+      {
+        "key": "customer",
+        "label": "Customer",
+        "controlType": "singleSelect",
+        "valueType": "string",
+        "field": "customerName",
+        "optionsMode": "distinctFromRows",
+        "required": false,
+        "displayOrder": 10
+      },
+      {
+        "key": "salesPerson",
+        "label": "Sales Person",
+        "controlType": "singleSelect",
+        "valueType": "string",
+        "field": "salesPersonName",
+        "optionsMode": "distinctFromRows",
+        "required": false,
+        "displayOrder": 20
+      },
+      {
+        "key": "agent",
+        "label": "Agent",
+        "controlType": "singleSelect",
+        "valueType": "string",
+        "field": "agentName",
+        "optionsMode": "distinctFromRows",
+        "required": false,
+        "displayOrder": 30
+      },
+      {
+        "key": "search",
+        "label": "Search",
+        "controlType": "text",
+        "valueType": "string",
+        "searchFields": [
+          "customerName",
+          "stageLabel",
+          "actionPlanText",
+          "opportunityDescription",
+          "salesPersonName",
+          "agentName",
+          "contactText",
+          "address"
+        ],
+        "required": false,
+        "displayOrder": 40
+      }
+    ],
+    "grouping": {
+      "field": "stageLabel",
+      "label": "Stage",
+      "emptyValue": "Unassigned Stage",
+      "sort": "alphaAsc",
+      "initiallyCollapsed": true,
+      "showCount": true
+    },
+    "summary": [
+      {
+        "code": "FOLLOW_UP_COUNT",
+        "label": "Follow-Ups",
+        "type": "filteredCountOverTotal"
+      }
+    ],
+    "card": {
+      "template": "followupOpportunity",
+      "titleField": "customerName",
+      "badge": {
+        "label": "Doc No",
+        "field": "docNo"
+      },
+      "tone": {
+        "type": "dateProximity",
+        "field": "followUpDate",
+        "lapsedBeforeToday": true,
+        "upcomingDays": 7,
+        "timeZoneSource": "requestContext"
+      },
+      "fields": [
+        {
+          "code": "FOLLOW_UP",
+          "section": "body",
+          "label": "F-up",
+          "iconCode": "event",
+          "fields": [
+            "followUpDateLabel",
+            "stageLabel"
+          ],
+          "joinWith": " | ",
+          "displayOrder": 10
+        },
+        {
+          "code": "ACTION_PLAN",
+          "section": "body",
+          "label": "Action plan",
+          "iconCode": "playlist_add_check",
+          "fields": [
+            "actionPlanText"
+          ],
+          "displayOrder": 20
+        },
+        {
+          "code": "DESCRIPTION",
+          "section": "body",
+          "iconCode": "assignment",
+          "fields": [
+            "opportunityDescription"
+          ],
+          "displayOrder": 30
+        },
+        {
+          "code": "PEOPLE",
+          "section": "body",
+          "iconCode": "support_agent",
+          "fields": [
+            "salesPersonName",
+            "agentName"
+          ],
+          "prefixes": {
+            "salesPersonName": "SP",
+            "agentName": "Agent"
+          },
+          "joinWith": " | ",
+          "displayOrder": 40
+        },
+        {
+          "code": "CONTACT",
+          "section": "body",
+          "iconCode": "contact_phone",
+          "fields": [
+            "contactText"
+          ],
+          "valueType": "contact",
+          "displayOrder": 50
+        },
+        {
+          "code": "ADDRESS",
+          "section": "body",
+          "iconCode": "location",
+          "fields": [
+            "address"
+          ],
+          "displayOrder": 60
+        },
+        {
+          "code": "AMOUNTS",
+          "section": "amount",
+          "iconCode": "currency_rupee",
+          "fields": [
+            "quoteAmount",
+            "orderAmount"
+          ],
+          "prefixes": {
+            "quoteAmount": "Quote Amount",
+            "orderAmount": "Order Amount"
+          },
+          "joinWith": " | ",
+          "displayOrder": 70
+        }
+      ]
+    },
+    "attachments": {
+      "enabled": true,
+      "sourceType": "CR01",
+      "documentGuidField": "attachmentDocumentGuid",
+      "declaredCountField": "attachmentCount",
+      "loadMode": "supplementaryFreshRequest",
+      "openActionCode": "OPEN_ATTACHMENTS"
+    },
+    "actions": [
+      {
+        "actionCode": "OPEN_OPPORTUNITY",
+        "label": "Open opportunity",
+        "kind": "clientNavigation",
+        "navigationCode": "OPEN_OPPORTUNITY_TEMPLATE",
+        "trigger": "rowTap",
+        "placement": "rowTrailing",
+        "argumentFields": {
+          "targetId": "targetId",
+          "templateVariant": "templateVariant"
+        },
+        "successEffect": "refreshDashboardWhenChildReturnsTrue"
+      },
+      {
+        "actionCode": "OPEN_ATTACHMENTS",
+        "label": "Attachments",
+        "kind": "clientDialog",
+        "trigger": "tap",
+        "placement": "cardFooter",
+        "successEffect": "none"
+      }
+    ]
+  }
+}
+

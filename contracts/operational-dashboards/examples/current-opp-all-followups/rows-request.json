@@ -1,0 +1,31 @@
+{
+  "filters": {
+    "customer": "",
+    "salesPerson": "",
+    "agent": "",
+    "search": "fleet"
+  },
+  "sort": [],
+  "context": {
+    "actingUserId": null,
+    "branchId": "BR-01",
+    "financialYearId": "FY-2026",
+    "platform": "web",
+    "rendererVersion": 1,
+    "capabilities": [
+      "groupedCardList",
+      "dropdownFilter",
+      "textSearch",
+      "dateProximityTone",
+      "attachmentDialog",
+      "clientNavigation"
+    ],
+    "locale": "en-IN",
+    "timeZone": "Asia/Kolkata"
+  },
+  "page": {
+    "number": 1,
+    "size": 50
+  }
+}
+

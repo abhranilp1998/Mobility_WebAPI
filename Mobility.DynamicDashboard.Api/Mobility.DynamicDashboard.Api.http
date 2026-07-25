@@ -1,0 +1,106 @@
+@Mobility.DynamicDashboard.Api_HostAddress = http://localhost:5282
+
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID/definition?platform=web&rendererVersion=1
+Accept: application/json
+
+###
+
+POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_CURRENT_OPP_ALL_FOLLOWUPS/rows
+Content-Type: application/json
+Accept: application/json
+
+{
+  "filters": {
+    "customer": "",
+    "salesPerson": "",
+    "agent": "",
+    "search": ""
+  },
+  "context": {
+    "loginUserId": "demo",
+    "branchId": "1",
+    "financialYearId": "1",
+    "platform": "web",
+    "rendererVersion": 1
+  },
+  "pageNumber": 1,
+  "pageSize": 50
+}
+
+###
+
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/TASK_STATUS_SCREEN_ID/definition?platform=web&rendererVersion=1
+Accept: application/json
+
+###
+
+POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/rows
+Content-Type: application/json
+Accept: application/json
+
+{
+  "filters": {
+    "customer": "",
+    "classification": "",
+    "stage": "",
+    "search": ""
+  },
+  "context": {
+    "loginUserId": "demo",
+    "userId": "demo",
+    "branchId": "1",
+    "financialYearId": "1",
+    "platform": "web",
+    "rendererVersion": 1
+  },
+  "pageNumber": 1,
+  "pageSize": 50
+}
+
+###
+
+POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/actions/SET_WORKING_STATUS
+Content-Type: application/json
+Accept: application/json
+
+{
+  "row": {
+    "apiId": "task-guid-2001"
+  },
+  "inputs": {
+    "isWorking": true
+  },
+  "context": {
+    "loginUserId": "demo"
+  }
+}
+
+###
+
+POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/actions/SET_PRIORITY
+Content-Type: application/json
+Accept: application/json
+
+{
+  "row": {
+    "apiId": "task-guid-2001"
+  },
+  "inputs": {
+    "priority": 2
+  },
+  "context": {
+    "loginUserId": "demo"
+  }
+}
+
+###
+
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/attachments?sourceType=GN25&documentGuid=task-guid-2001
+Accept: application/json
+
+###
