@@ -1,103 +1,242 @@
+using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
+using Mobility.DynamicDashboard.Api.Infrastructure;
 using Mobility.DynamicDashboard.Api.Models;
 using Mobility.DynamicDashboard.Api.Services;
 
 namespace Mobility.DynamicDashboard.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = "DashboardApi")]
 [Route("api/v1/dashboards")]
 public sealed class DashboardsController(IDynamicDashboardService service)
     : ControllerBase
 {
-    /// <summary>Gets the published renderer definition for a legacy screen identifier.</summary>
+    private const string DashboardCodePattern = "^[A-Z0-9_]{3,100}$";
+    private const string FilterKeyPattern = "^[A-Za-z][A-Za-z0-9_]{0,99}$";
+    private const string DefinitionVersionPattern = "^[0-9]+\\.[0-9]+\\.[0-9]+$";
+
+    /// <summary>Gets a compatible published dashboard definition.</summary>
     /// <remarks>
-    /// The client must reject definitions whose schema version, renderer version,
-    /// or required capabilities it cannot satisfy and use the declared legacy fallback.
+    /// The capability query parameter is repeated for every compiled renderer
+    /// capability. An incompatible client receives the declared legacy fallback.
     /// </remarks>
-    [HttpGet("{screenId}/definition", Name = "GetDashboardDefinition")]
+    [HttpGet("{screenId}/definition", Name = "getDashboardDefinition")]
     [ProducesResponseType<DashboardDefinitionResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status304NotModified)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DashboardDefinitionResponse>> GetDefinition(
+        [FromRoute, Required, StringLength(150, MinimumLength = 1)]
         string screenId,
-        [FromQuery] string? platform,
-        [FromQuery] int? rendererVersion,
+        [FromQuery, Required]
+        ClientPlatform? platform,
+        [FromQuery, Range(1, int.MaxValue)]
+        int rendererVersion,
+        [FromQuery(Name = "capability")]
+        string[]? capabilities,
         CancellationToken cancellationToken)
     {
-        var definition = await service.GetDefinitionAsync(
+        var result = await service.GetDefinitionAsync(
             screenId,
             platform,
             rendererVersion,
+            capabilities ?? [],
             cancellationToken);
 
-        return definition is null ? NotFound() : Ok(definition);
+        if (!result.IsSuccess)
+        {
+            return DashboardProblemFactory.ToActionResult(HttpContext, result);
+        }
+
+        var definition = result.Value!;
+        Response.Headers.ETag = definition.Etag;
+        if (MatchesEtag(Request.Headers.IfNoneMatch, definition.Etag))
+        {
+            return StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        return Ok(definition);
     }
 
-    /// <summary>Queries normalized rows for a whitelisted dashboard data source.</summary>
+    /// <summary>Queries normalized rows through a whitelisted data source.</summary>
     /// <remarks>
-    /// Dashboard and data-source codes are server-owned whitelist keys. They are
-    /// never interpreted as URLs, SQL, stored-procedure names, or executable code.
+    /// Dashboard and data-source codes are opaque server whitelist keys. Raw
+    /// SQL, legacy class/function names, URLs, and connection values are never
+    /// accepted from the client.
     /// </remarks>
-    [HttpPost("{dashboardCode}/rows", Name = "QueryDashboardRows")]
+    [HttpPost("{dashboardCode}/rows", Name = "queryDashboardRows")]
     [ProducesResponseType<DashboardRowsResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DashboardRowsResponse>> GetRows(
+        [FromRoute, Required, RegularExpression(DashboardCodePattern)]
         string dashboardCode,
+        [FromHeader(
+            Name = "X-Dashboard-Definition-Version"),
+         Required,
+         RegularExpression(DefinitionVersionPattern)]
+        string definitionVersion,
         [FromBody] DashboardRowsRequest request,
         CancellationToken cancellationToken)
     {
-        var rows = await service.GetRowsAsync(
+        var result = await service.GetRowsAsync(
             dashboardCode,
+            definitionVersion,
+            GetCallerId(),
             request,
             cancellationToken);
 
-        return rows is null ? NotFound() : Ok(rows);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : DashboardProblemFactory.ToActionResult(HttpContext, result);
     }
 
-    /// <summary>Executes a whitelisted server action for one dashboard row.</summary>
+    /// <summary>Loads typed options through a whitelisted option source.</summary>
     /// <remarks>
-    /// Only action codes registered for the dashboard may execute. Navigation-only
-    /// actions remain client commands and do not invoke arbitrary backend targets.
+    /// This future-proofs Work Done filters without exposing a legacy
+    /// DataSource or FilterClause. Only registered dashboard/filter pairs run.
+    /// </remarks>
+    [HttpGet(
+        "{dashboardCode}/filters/{filterKey}/options",
+        Name = "getDashboardFilterOptions")]
+    [ProducesResponseType<DashboardFilterOptionsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<DashboardFilterOptionsResponse>>
+        GetFilterOptions(
+            [FromRoute, Required, RegularExpression(DashboardCodePattern)]
+            string dashboardCode,
+            [FromRoute, Required, RegularExpression(FilterKeyPattern)]
+            string filterKey,
+            [FromHeader(
+                Name = "X-Dashboard-Definition-Version"),
+             Required,
+             RegularExpression(DefinitionVersionPattern)]
+            string definitionVersion,
+            [FromQuery, StringLength(100)]
+            string? search,
+            [FromQuery]
+            string? cursor,
+            CancellationToken cancellationToken)
+    {
+        var result = await service.GetFilterOptionsAsync(
+            dashboardCode,
+            filterKey,
+            definitionVersion,
+            search,
+            cursor,
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : DashboardProblemFactory.ToActionResult(HttpContext, result);
+    }
+
+    /// <summary>Executes a registered action for an authorized row.</summary>
+    /// <remarks>
+    /// The server reloads the row by rowKey; posted display fields are neither
+    /// accepted nor trusted. Mutating registrations require Idempotency-Key.
     /// </remarks>
     [HttpPost(
         "{dashboardCode}/actions/{actionCode}",
-        Name = "ExecuteDashboardAction")]
+        Name = "executeDashboardAction")]
     [ProducesResponseType<DashboardActionResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DashboardActionResponse>> ExecuteAction(
+        [FromRoute, Required, RegularExpression(DashboardCodePattern)]
         string dashboardCode,
+        [FromRoute, Required, RegularExpression(DashboardCodePattern)]
         string actionCode,
+        [FromHeader(
+            Name = "X-Dashboard-Definition-Version"),
+         Required,
+         RegularExpression(DefinitionVersionPattern)]
+        string definitionVersion,
+        [FromHeader(Name = "Idempotency-Key")]
+        string? idempotencyKey,
         [FromBody] DashboardActionRequest request,
         CancellationToken cancellationToken)
     {
         var result = await service.ExecuteActionAsync(
             dashboardCode,
             actionCode,
+            definitionVersion,
+            idempotencyKey,
+            GetCallerId(),
             request,
             cancellationToken);
 
-        return result is null ? NotFound() : Ok(result);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : DashboardProblemFactory.ToActionResult(HttpContext, result);
     }
 
-    /// <summary>Gets attachment metadata by source type and document GUID.</summary>
+    /// <summary>Gets fresh CR01 or GN25 attachment metadata.</summary>
     /// <remarks>
-    /// CR01 and GN25 attachment identity is the source-type/document-GUID pair.
-    /// Attachment metadata failure must not make the primary dashboard query fail.
+    /// Attachment identity is the required sourceType/documentGuid pair.
+    /// Loading is supplementary and isolated from the primary rows request.
     /// </remarks>
-    [HttpGet("{dashboardCode}/attachments", Name = "GetDashboardAttachments")]
+    [HttpGet("{dashboardCode}/attachments", Name = "getDashboardAttachments")]
     [ProducesResponseType<DashboardAttachmentsResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DashboardAttachmentsResponse>> GetAttachments(
+        [FromRoute, Required, RegularExpression(DashboardCodePattern)]
         string dashboardCode,
-        [FromQuery] string? sourceType,
-        [FromQuery] string? documentGuid,
+        [FromQuery, Required]
+        AttachmentSourceType? sourceType,
+        [FromQuery, Required, StringLength(100, MinimumLength = 1)]
+        string documentGuid,
         CancellationToken cancellationToken)
     {
         var result = await service.GetAttachmentsAsync(
             dashboardCode,
-            sourceType,
+            sourceType!.Value,
             documentGuid,
             cancellationToken);
 
-        return result is null ? NotFound() : Ok(result);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : DashboardProblemFactory.ToActionResult(HttpContext, result);
+    }
+
+    private string GetCallerId()
+    {
+        return User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new InvalidOperationException(
+                "The authorized dashboard caller has no subject identifier.");
+    }
+
+    private static bool MatchesEtag(
+        StringValues ifNoneMatch,
+        string currentEtag)
+    {
+        return ifNoneMatch
+            .SelectMany(value => (value ?? string.Empty).Split(','))
+            .Select(value => value.Trim())
+            .Any(value =>
+                value == "*" ||
+                value.Equals(currentEtag, StringComparison.Ordinal) ||
+                value.StartsWith("W/", StringComparison.Ordinal) &&
+                value[2..].Equals(currentEtag, StringComparison.Ordinal));
     }
 }

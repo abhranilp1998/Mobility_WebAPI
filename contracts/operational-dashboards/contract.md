@@ -23,7 +23,7 @@ The recommended ASP.NET Core shape is controller based:
 - legacy adapters normalize ASMX/database output;
 - DTOs are separate from persistence entities and legacy response models.
 
-## 2. Proposed DTOs
+## 2. Runtime DTO contract
 
 ### `DashboardRequestContext`
 
@@ -282,4 +282,3 @@ names, or scripts.
   query text.
 - Use cancellation tokens and bounded legacy-call timeouts.
 - Add audit records for definition publication and action execution.
-

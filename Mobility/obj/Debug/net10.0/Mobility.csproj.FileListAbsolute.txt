@@ -31,3 +31,4 @@
 /Users/coral/Documents/WebAPIs/Mobility/Mobility/obj/Debug/net10.0/Mobility.pdb
 /Users/coral/Documents/WebAPIs/Mobility/Mobility/obj/Debug/net10.0/Mobility.genruntimeconfig.cache
 /Users/coral/Documents/WebAPIs/Mobility/Mobility/obj/Debug/net10.0/ref/Mobility.dll
+/Users/coral/Documents/WebAPIs/Mobility/Mobility/obj/Debug/net10.0/Mobility.sourcelink.json

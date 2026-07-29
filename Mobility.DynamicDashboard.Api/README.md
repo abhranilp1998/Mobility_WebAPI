@@ -6,15 +6,27 @@ Backend contract for dynamic Flutter dashboards.
 
 - `GET /api/v1/dashboards/{screenId}/definition`
 - `POST /api/v1/dashboards/{dashboardCode}/rows`
+- `GET /api/v1/dashboards/{dashboardCode}/filters/{filterKey}/options`
 - `POST /api/v1/dashboards/{dashboardCode}/actions/{actionCode}`
 - `GET /api/v1/dashboards/{dashboardCode}/attachments`
 - `GET /health`
 
 ## Current State
 
-This project is intentionally scaffolded with an in-memory repository so Flutter can start integrating against a stable contract. Replace `InMemoryDashboardRepository` with a SQL-backed implementation after connection strings and table names are finalized.
+Current Opp All Followups is the first and only fully implemented dashboard
+POC. The repository is intentionally in-memory so Flutter can integrate
+against the reviewed envelope without SQL, Dapper, ASMX, or production
+business dependencies. Task Status mutations are whitelist-backed mocks only.
 
 The backend should return normalized dashboard rows. Flutter should not parse important dashboard fields from packed strings like `Line1`, `Line2`, or `Line3`.
+
+## Authentication
+
+All dashboard endpoints require the `DashboardApi` authorization policy.
+Development uses an explicitly enabled local authentication handler. Outside
+Development, startup fails closed until deployment supplies
+`DashboardApi:Authentication:Authority` and `Audience`; no issuer, audience,
+tenant, or secret is invented in this repository.
 
 ## Contract review
 
@@ -33,6 +45,6 @@ as the interactive endpoint list. The launch profiles set `launchUrl` to
 `swagger`, so running either profile from an IDE opens the correct page instead
 of the API root.
 
-The generated snapshot describes the current scaffold. It does not approve the
-future SQL repository, legacy adapters, authentication, action handlers, or
-Flutter renderer implementation.
+The generated snapshot describes the implemented in-memory POC. It does not
+approve a future SQL repository, legacy adapters, production identity
+configuration, production Task Status mutations, or Flutter renderer changes.

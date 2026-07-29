@@ -7,7 +7,7 @@
   "rows": [
     {
       "rowKey": "OPP-1001",
-      "rowVersion": null,
+      "rowVersion": "row-opp-1001-v1",
       "values": {
         "targetId": "OPP-1001",
         "customerName": "Apex Motors",
@@ -52,4 +52,3 @@
     "hasMore": false
   }
 }
-

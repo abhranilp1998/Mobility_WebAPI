@@ -1,103 +1,161 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Mobility.DynamicDashboard.Api.Models;
 
 namespace Mobility.DynamicDashboard.Api.Data;
 
 public sealed class InMemoryDashboardRepository : IDashboardRepository
 {
-    private const string CurrentOppScreenId = "CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID";
-    private const string CurrentOppCode = "CSPL_CURRENT_OPP_ALL_FOLLOWUPS";
-    private const string TaskStatusScreenId = "TASK_STATUS_SCREEN_ID";
-    private const string TaskStatusCode = "CSPL_TASK_STATUS";
+    public const string CurrentOppScreenId =
+        "843cb318_4007_4f62_91c5_fa400d1a31c5";
+
+    public const string CurrentOppCode = "CSPL_CURRENT_OPP_ALL_FOLLOWUPS";
+    public const string TaskStatusCode = "CSPL_TASK_STATUS";
+    public const string DefinitionVersion = "1.0.0";
+
+    private static readonly DashboardDefinitionResponse CurrentOppDefinition =
+        CreateCurrentOppDefinition();
+
+    private static readonly IReadOnlyDictionary<(string Dashboard, string Action),
+        DashboardActionRegistration> ActionWhitelist =
+        new Dictionary<(string Dashboard, string Action), DashboardActionRegistration>
+        {
+            [(CurrentOppCode, "OPEN_OPPORTUNITY")] =
+                new(CurrentOppCode, DefinitionVersion, "OPEN_OPPORTUNITY", false),
+            [(CurrentOppCode, "OPEN_ATTACHMENTS")] =
+                new(CurrentOppCode, DefinitionVersion, "OPEN_ATTACHMENTS", false),
+            [(TaskStatusCode, "SET_WORKING_STATUS")] =
+                new(TaskStatusCode, DefinitionVersion, "SET_WORKING_STATUS", true),
+            [(TaskStatusCode, "SET_PRIORITY")] =
+                new(TaskStatusCode, DefinitionVersion, "SET_PRIORITY", true),
+            [(TaskStatusCode, "VIEW_TASK_HISTORY")] =
+                new(TaskStatusCode, DefinitionVersion, "VIEW_TASK_HISTORY", false)
+        };
+
+    private readonly ConcurrentDictionary<string, DashboardActionResponse>
+        _idempotentResponses = new(StringComparer.Ordinal);
 
     public Task<DashboardDefinitionResponse?> GetDefinitionAsync(
         string screenId,
-        string? platform,
-        int? rendererVersion,
         CancellationToken cancellationToken)
     {
-        DashboardDefinitionResponse? response = screenId.ToUpperInvariant() switch
-        {
-            CurrentOppScreenId => CurrentOppDefinition(),
-            CurrentOppCode => CurrentOppDefinition(),
-            TaskStatusScreenId => TaskStatusDefinition(),
-            TaskStatusCode => TaskStatusDefinition(),
-            _ => null
-        };
+        var definition = screenId.Equals(
+                CurrentOppScreenId,
+                StringComparison.OrdinalIgnoreCase) ||
+            screenId.Equals(CurrentOppCode, StringComparison.OrdinalIgnoreCase)
+                ? CurrentOppDefinition
+                : null;
 
-        return Task.FromResult(response);
+        return Task.FromResult(definition);
     }
 
-    public Task<DashboardRowsResponse?> GetRowsAsync(
+    public Task<IReadOnlyList<NormalizedDashboardRow>?> QueryRowsAsync(
         string dashboardCode,
         DashboardRowsRequest request,
         CancellationToken cancellationToken)
     {
-        var normalizedCode = dashboardCode.ToUpperInvariant();
-        var rows = normalizedCode switch
+        if (!dashboardCode.Equals(CurrentOppCode, StringComparison.OrdinalIgnoreCase))
         {
-            CurrentOppCode => FilterCurrentOppRows(CurrentOppRows(), request.Filters),
-            TaskStatusCode => FilterTaskRows(TaskStatusRows(), request.Filters),
-            _ => null
-        };
-
-        if (rows is null)
-        {
-            return Task.FromResult<DashboardRowsResponse?>(null);
+            return Task.FromResult<IReadOnlyList<NormalizedDashboardRow>?>(null);
         }
 
-        var totalCount = rows.Count;
-        var pageNumber = Math.Max(1, request.PageNumber ?? 1);
-        var pageSize = Math.Clamp(request.PageSize ?? totalCount, 1, 500);
-        var skipped = (pageNumber - 1) * pageSize;
-        var pagedRows = rows.Skip(skipped).Take(pageSize).ToList();
+        var rows = CurrentOppRows().AsEnumerable();
+        var customer = ReadFilter(request.Filters, "customer");
+        var salesPerson = ReadFilter(request.Filters, "salesPerson");
+        var agent = ReadFilter(request.Filters, "agent");
+        var search = ReadFilter(request.Filters, "search");
 
-        var response = new DashboardRowsResponse(
-            normalizedCode,
-            totalCount,
-            pagedRows.Count,
-            pagedRows,
-            new DashboardPageInfo(
-                pageNumber,
-                pageSize,
-                skipped + pagedRows.Count < totalCount));
+        rows = rows
+            .Where(row => IsBlankOrEquals(row, "customerName", customer))
+            .Where(row => IsBlankOrEquals(row, "salesPersonName", salesPerson))
+            .Where(row => IsBlankOrEquals(row, "agentName", agent))
+            .Where(row => IsBlankOrContainsAny(row, search));
 
-        return Task.FromResult<DashboardRowsResponse?>(response);
+        IOrderedEnumerable<NormalizedDashboardRow>? ordered = null;
+        foreach (var sort in request.Sort)
+        {
+            Func<NormalizedDashboardRow, string> selector =
+                row => ReadValue(row, sort.Field);
+
+            ordered = ordered is null
+                ? sort.Direction == SortDirection.Desc
+                    ? rows.OrderByDescending(selector, StringComparer.OrdinalIgnoreCase)
+                    : rows.OrderBy(selector, StringComparer.OrdinalIgnoreCase)
+                : sort.Direction == SortDirection.Desc
+                    ? ordered.ThenByDescending(selector, StringComparer.OrdinalIgnoreCase)
+                    : ordered.ThenBy(selector, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return Task.FromResult<IReadOnlyList<NormalizedDashboardRow>?>(
+            (ordered ?? rows.OrderBy(row => row.RowKey, StringComparer.OrdinalIgnoreCase))
+            .ToList());
     }
 
-    public Task<DashboardActionResponse?> ExecuteActionAsync(
+    public Task<NormalizedDashboardRow?> FindRowAsync(
         string dashboardCode,
-        string actionCode,
-        DashboardActionRequest request,
+        string rowKey,
         CancellationToken cancellationToken)
     {
-        var normalizedDashboard = dashboardCode.ToUpperInvariant();
-        var normalizedAction = actionCode.ToUpperInvariant();
+        IEnumerable<NormalizedDashboardRow>? rows =
+            dashboardCode.ToUpperInvariant() switch
+            {
+                CurrentOppCode => CurrentOppRows(),
+                TaskStatusCode => TaskStatusRows(),
+                _ => null
+            };
 
-        if (normalizedDashboard != TaskStatusCode)
+        var row = rows?.SingleOrDefault(item =>
+            item.RowKey.Equals(rowKey, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(row);
+    }
+
+    public Task<DashboardFilterOptionsResponse?> GetFilterOptionsAsync(
+        string dashboardCode,
+        string filterKey,
+        string? search,
+        string? cursor,
+        CancellationToken cancellationToken)
+    {
+        if (!dashboardCode.Equals(CurrentOppCode, StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult<DashboardActionResponse?>(null);
+            return Task.FromResult<DashboardFilterOptionsResponse?>(null);
         }
 
-        DashboardActionResponse? response = normalizedAction switch
+        var field = filterKey.ToLowerInvariant() switch
         {
-            "SET_WORKING_STATUS" => SetWorkingStatusResponse(request),
-            "SET_PRIORITY" => SetPriorityResponse(request),
-            "VIEW_TASK_HISTORY" => new DashboardActionResponse(
-                true,
-                "Task history is handled by the mobile client navigation action.",
-                "handledByClient"),
+            "customer" => "customerName",
+            "salesperson" => "salesPersonName",
+            "agent" => "agentName",
             _ => null
         };
 
-        return Task.FromResult(response);
+        if (field is null)
+        {
+            return Task.FromResult<DashboardFilterOptionsResponse?>(null);
+        }
+
+        var options = CurrentOppRows()
+            .Select(row => ReadValue(row, field))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(value => string.IsNullOrWhiteSpace(search) ||
+                value.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .Select(value => new DashboardFilterOption(value, value, null, false))
+            .ToList();
+
+        return Task.FromResult<DashboardFilterOptionsResponse?>(
+            new DashboardFilterOptionsResponse(
+                CurrentOppCode,
+                DefinitionVersion,
+                filterKey,
+                options));
     }
 
     public Task<DashboardAttachmentsResponse?> GetAttachmentsAsync(
         string dashboardCode,
-        string? sourceType,
-        string? documentGuid,
+        AttachmentSourceType sourceType,
+        string documentGuid,
         CancellationToken cancellationToken)
     {
         var normalizedDashboard = dashboardCode.ToUpperInvariant();
@@ -106,722 +164,477 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
             return Task.FromResult<DashboardAttachmentsResponse?>(null);
         }
 
+        var sourceCode = sourceType.ToString();
         var attachments = AttachmentRows()
-            .Where(item => Matches(item.SourceType, sourceType))
-            .Where(item => Matches(item.DocumentGuid, documentGuid))
+            .Where(item =>
+                item.SourceType.Equals(sourceCode, StringComparison.OrdinalIgnoreCase) &&
+                item.DocumentGuid.Equals(
+                    documentGuid,
+                    StringComparison.OrdinalIgnoreCase))
             .ToList();
 
+        var declaredCount = FindAttachmentDeclaredCount(
+            normalizedDashboard,
+            sourceCode,
+            documentGuid);
+
         return Task.FromResult<DashboardAttachmentsResponse?>(
-            new DashboardAttachmentsResponse(normalizedDashboard, attachments));
+            new DashboardAttachmentsResponse(
+                normalizedDashboard,
+                sourceCode,
+                documentGuid,
+                declaredCount,
+                attachments.Count,
+                attachments));
     }
 
-    private static DashboardDefinitionResponse CurrentOppDefinition()
+    public DashboardActionRegistration? GetActionRegistration(
+        string dashboardCode,
+        string actionCode)
+    {
+        ActionWhitelist.TryGetValue(
+            (dashboardCode.ToUpperInvariant(), actionCode.ToUpperInvariant()),
+            out var registration);
+        return registration;
+    }
+
+    public DashboardActionResponse? GetIdempotentActionResponse(string replayKey)
+    {
+        _idempotentResponses.TryGetValue(replayKey, out var response);
+        return response;
+    }
+
+    public void StoreIdempotentActionResponse(
+        string replayKey,
+        DashboardActionResponse response)
+    {
+        _idempotentResponses.TryAdd(replayKey, response);
+    }
+
+    private static DashboardDefinitionResponse CreateCurrentOppDefinition()
     {
         return new DashboardDefinitionResponse(
             CurrentOppScreenId,
             CurrentOppCode,
             "Current Opp All Followups",
-            "groupedCardList",
+            DefinitionVersion,
             1,
             1,
             [
                 "groupedCardList",
                 "dropdownFilter",
                 "textSearch",
-                "rowCard",
-                "attachments",
-                "navigationAction"
+                "dateProximityTone",
+                "attachmentDialog",
+                "clientNavigation"
             ],
             "CSPL_CURRENT_OPP_ALL_FOLLOWUPS_DATA",
-            new DashboardFallback("legacyScreen", CurrentOppScreenId),
-            ParseObject(
-                """
-                {
-                  "rowIdentityField": "targetId",
-                  "filters": [
+            "\"current-opp-all-followups-1.0.0-7f4a4e0f\"",
+            new DashboardFallback(
+                "legacyScreen",
+                CurrentOppScreenId,
+                "Use the existing dashboard when the renderer is incompatible or the POC is disabled."),
+            new DashboardDefinition(
+                "groupedCardList",
+                "targetId",
+                [
+                    new(
+                        "customer",
+                        "Customer",
+                        "singleSelect",
+                        "string",
+                        false,
+                        10,
+                        Field: "customerName",
+                        OptionsMode: "distinctFromRows"),
+                    new(
+                        "salesPerson",
+                        "Sales Person",
+                        "singleSelect",
+                        "string",
+                        false,
+                        20,
+                        Field: "salesPersonName",
+                        OptionsMode: "distinctFromRows"),
+                    new(
+                        "agent",
+                        "Agent",
+                        "singleSelect",
+                        "string",
+                        false,
+                        30,
+                        Field: "agentName",
+                        OptionsMode: "distinctFromRows"),
+                    new(
+                        "search",
+                        "Search",
+                        "text",
+                        "string",
+                        false,
+                        40,
+                        SearchFields:
+                        [
+                            "customerName",
+                            "stageLabel",
+                            "actionPlanText",
+                            "opportunityDescription",
+                            "salesPersonName",
+                            "agentName",
+                            "contactText",
+                            "address"
+                        ])
+                ],
+                new DashboardGrouping(
+                    "stageLabel",
+                    "Stage",
+                    "Unassigned Stage",
+                    "alphaAsc",
+                    true,
+                    true),
+                [
+                    new DashboardSummary(
+                        "FOLLOW_UP_COUNT",
+                        "Follow-Ups",
+                        "filteredCountOverTotal")
+                ],
+                new DashboardCardDefinition(
+                    "followupOpportunity",
+                    "customerName",
+                    [
+                        new(
+                            "FOLLOW_UP",
+                            "body",
+                            ["followUpDateLabel", "stageLabel"],
+                            10,
+                            "F-up",
+                            "event",
+                            JoinWith: " | "),
+                        new(
+                            "ACTION_PLAN",
+                            "body",
+                            ["actionPlanText"],
+                            20,
+                            "Action plan",
+                            "playlist_add_check"),
+                        new(
+                            "DESCRIPTION",
+                            "body",
+                            ["opportunityDescription"],
+                            30,
+                            IconCode: "assignment"),
+                        new(
+                            "PEOPLE",
+                            "body",
+                            ["salesPersonName", "agentName"],
+                            40,
+                            IconCode: "support_agent",
+                            Prefixes: new()
+                            {
+                                ["salesPersonName"] = "SP",
+                                ["agentName"] = "Agent"
+                            },
+                            JoinWith: " | "),
+                        new(
+                            "CONTACT",
+                            "body",
+                            ["contactText"],
+                            50,
+                            IconCode: "contact_phone",
+                            ValueType: "contact"),
+                        new(
+                            "ADDRESS",
+                            "body",
+                            ["address"],
+                            60,
+                            IconCode: "location"),
+                        new(
+                            "AMOUNTS",
+                            "amount",
+                            ["quoteAmount", "orderAmount"],
+                            70,
+                            IconCode: "currency_rupee",
+                            Prefixes: new()
+                            {
+                                ["quoteAmount"] = "Quote Amount",
+                                ["orderAmount"] = "Order Amount"
+                            },
+                            JoinWith: " | ")
+                    ],
+                    Badge: new()
                     {
-                      "key": "customer",
-                      "label": "Customer",
-                      "type": "dropdown",
-                      "field": "customerName",
-                      "optionsMode": "distinctFromRows"
+                        ["label"] = "Doc No",
+                        ["field"] = "docNo"
                     },
+                    Tone: new()
                     {
-                      "key": "salesPerson",
-                      "label": "Sales Person",
-                      "type": "dropdown",
-                      "field": "salesPersonName",
-                      "optionsMode": "distinctFromRows"
-                    },
-                    {
-                      "key": "agent",
-                      "label": "Agent",
-                      "type": "dropdown",
-                      "field": "agentName",
-                      "optionsMode": "distinctFromRows"
-                    },
-                    {
-                      "key": "search",
-                      "label": "Search",
-                      "type": "textSearch",
-                      "searchFields": [
-                        "customerName",
-                        "stageLabel",
-                        "actionPlanText",
-                        "opportunityDescription",
-                        "salesPersonName",
-                        "agentName",
-                        "contactText",
-                        "address"
-                      ]
-                    }
-                  ],
-                  "groups": [
-                    {
-                      "field": "stageLabel",
-                      "label": "Stage",
-                      "emptyValue": "Unassigned Stage",
-                      "sort": "alphaAsc",
-                      "defaultCollapsed": true
-                    }
-                  ],
-                  "summary": [
-                    {
-                      "label": "Follow-Ups",
-                      "type": "filteredCountOverTotal"
-                    }
-                  ],
-                  "card": {
-                    "type": "followupOpportunity",
-                    "titleField": "customerName",
-                    "badge": {
-                      "label": "Doc No",
-                      "field": "docNo"
-                    },
-                    "tone": {
-                      "type": "dateProximity",
-                      "field": "followUpDate",
-                      "lapsedBeforeToday": true,
-                      "upcomingDays": 7
-                    },
-                    "fields": [
-                      {
-                        "section": "body",
-                        "icon": "event",
-                        "label": "F-up",
-                        "expression": ["followUpDateLabel", "stageLabel"],
-                        "joinWith": " | "
-                      },
-                      {
-                        "section": "body",
-                        "icon": "playlist_add_check",
-                        "label": "Action plan",
-                        "field": "actionPlanText"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "assignment",
-                        "field": "opportunityDescription"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "support_agent",
-                        "expression": ["salesPersonName", "agentName"],
-                        "prefixes": {
-                          "salesPersonName": "SP",
-                          "agentName": "Agent"
-                        },
-                        "joinWith": " | "
-                      },
-                      {
-                        "section": "body",
-                        "icon": "contact_phone",
-                        "field": "contactText",
-                        "valueType": "contact"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "location",
-                        "field": "address"
-                      },
-                      {
-                        "section": "amount",
-                        "icon": "currency_rupee",
-                        "expression": ["quoteAmount", "orderAmount"],
-                        "prefixes": {
-                          "quoteAmount": "Quote Amount",
-                          "orderAmount": "Order Amount"
-                        },
-                        "joinWith": " | "
-                      }
-                    ]
-                  },
-                  "attachments": {
-                    "enabled": true,
-                    "sourceType": "CR01",
-                    "documentGuidField": "attachmentDocumentGuid",
-                    "fallbackCountField": "attachmentCount"
-                  },
-                  "actions": [
-                    {
-                      "actionCode": "OPEN_OPPORTUNITY",
-                      "label": "Open opportunity",
-                      "icon": "chevron_right",
-                      "placement": "rowTrailing",
-                      "trigger": "rowTap",
-                      "actionType": "navigateLegacyTemplate",
-                      "successBehavior": "refreshWhenChildReturnsTrue"
-                    },
-                    {
-                      "actionCode": "OPEN_ATTACHMENTS",
-                      "label": "Attachments",
-                      "icon": "attach_file",
-                      "placement": "cardFooter",
-                      "actionType": "openAttachmentDialog"
-                    }
-                  ]
-                }
-                """));
+                        ["type"] = "dateProximity",
+                        ["field"] = "followUpDate",
+                        ["lapsedBeforeToday"] = true,
+                        ["upcomingDays"] = 7,
+                        ["timeZoneSource"] = "requestContext"
+                    }),
+                new DashboardAttachmentDefinition(
+                    true,
+                    "attachmentDocumentGuid",
+                    "supplementaryFreshRequest",
+                    "OPEN_ATTACHMENTS",
+                    SourceType: "CR01",
+                    DeclaredCountField: "attachmentCount"),
+                [
+                    new DashboardActionDefinition(
+                        "OPEN_OPPORTUNITY",
+                        "Open opportunity",
+                        "clientNavigation",
+                        "refreshDashboardWhenChildReturnsTrue",
+                        "OPEN_OPPORTUNITY_TEMPLATE",
+                        "rowTap",
+                        "rowTrailing",
+                        new()
+                        {
+                            ["targetId"] = "targetId",
+                            ["templateVariant"] = "templateVariant"
+                        }),
+                    new DashboardActionDefinition(
+                        "OPEN_ATTACHMENTS",
+                        "Attachments",
+                        "clientDialog",
+                        "none",
+                        Trigger: "tap",
+                        Placement: "cardFooter")
+                ]));
     }
 
-    private static DashboardDefinitionResponse TaskStatusDefinition()
+    private static IReadOnlyList<NormalizedDashboardRow> CurrentOppRows()
     {
-        return new DashboardDefinitionResponse(
-            TaskStatusScreenId,
-            TaskStatusCode,
-            "Task Status",
-            "cardList",
-            1,
-            1,
+        return
+        [
+            CurrentOppRow(
+                "OPP-1001",
+                "row-opp-1001-v1",
+                "Apex Motors",
+                "CR01-1001",
+                "Negotiation",
+                "2026-07-28",
+                "28/07/2026 Tuesday",
+                "Call purchase manager and confirm demo feedback.",
+                "Fleet renewal discussion for 12 vehicles.",
+                "SP-01",
+                "Ravi Kumar",
+                "AG-07",
+                "Neha Shah",
+                "Amit Patel | 9876543210 | amit@example.com",
+                "Ahmedabad",
+                1850000,
+                0,
+                "opp-guid-1001",
+                1,
+                "1"),
+            CurrentOppRow(
+                "OPP-1002",
+                "row-opp-1002-v1",
+                "Blue River Logistics",
+                "CR01-1002",
+                "Quotation",
+                "2026-07-20",
+                "20/07/2026 Monday",
+                "Send revised commercial offer.",
+                "Quotation pending for service contract.",
+                "SP-02",
+                "Meera Iyer",
+                "AG-04",
+                "Imran Khan",
+                "Sonal Desai | 9000011111",
+                "Surat",
+                420000,
+                0,
+                "opp-guid-1002",
+                0,
+                "2")
+        ];
+    }
+
+    private static NormalizedDashboardRow CurrentOppRow(
+        string rowKey,
+        string rowVersion,
+        string customerName,
+        string docNo,
+        string stageLabel,
+        string followUpDate,
+        string followUpDateLabel,
+        string actionPlanText,
+        string opportunityDescription,
+        string salesPersonId,
+        string salesPersonName,
+        string agentId,
+        string agentName,
+        string contactText,
+        string address,
+        decimal quoteAmount,
+        decimal orderAmount,
+        string attachmentDocumentGuid,
+        int attachmentCount,
+        string templateVariant)
+    {
+        return new NormalizedDashboardRow(
+            rowKey,
+            rowVersion,
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["targetId"] = rowKey,
+                ["customerName"] = customerName,
+                ["docNo"] = docNo,
+                ["stageLabel"] = stageLabel,
+                ["followUpDate"] = followUpDate,
+                ["followUpDateLabel"] = followUpDateLabel,
+                ["actionPlanText"] = actionPlanText,
+                ["opportunityDescription"] = opportunityDescription,
+                ["salesPersonId"] = salesPersonId,
+                ["salesPersonName"] = salesPersonName,
+                ["agentId"] = agentId,
+                ["agentName"] = agentName,
+                ["contactText"] = contactText,
+                ["address"] = address,
+                ["quoteAmount"] = quoteAmount,
+                ["orderAmount"] = orderAmount,
+                ["attachmentDocumentGuid"] = attachmentDocumentGuid,
+                ["attachmentCount"] = attachmentCount,
+                ["templateVariant"] = templateVariant
+            },
+            new DashboardAttachmentRef(
+                "CR01",
+                attachmentDocumentGuid,
+                attachmentCount),
             [
-                "cardList",
-                "dropdownFilter",
-                "textSearch",
-                "attachments",
-                "rowActionDialog",
-                "apiAction",
-                "legacyNavigation",
-                "localRowMutation"
-            ],
-            "CSPL_TASK_STATUS_DATA",
-            new DashboardFallback("legacyScreen", TaskStatusScreenId),
-            ParseObject(
-                """
+                new DashboardRowCommand("OPEN_OPPORTUNITY", true),
+                new DashboardRowCommand(
+                    "OPEN_ATTACHMENTS",
+                    attachmentCount > 0,
+                    attachmentCount > 0 ? null : "No attachments are declared.")
+            ]);
+    }
+
+    private static IReadOnlyList<NormalizedDashboardRow> TaskStatusRows()
+    {
+        return
+        [
+            new NormalizedDashboardRow(
+                "task-guid-2001",
+                "row-task-2001-v1",
+                new(StringComparer.OrdinalIgnoreCase)
                 {
-                  "rowIdentityField": "apiId",
-                  "filters": [
-                    {
-                      "key": "customer",
-                      "label": "Customer",
-                      "type": "dropdown",
-                      "field": "clientName",
-                      "optionsMode": "distinctFromRows"
-                    },
-                    {
-                      "key": "classification",
-                      "label": "Classification",
-                      "type": "dropdown",
-                      "field": "classificationName",
-                      "optionsMode": "distinctFromRows"
-                    },
-                    {
-                      "key": "stage",
-                      "label": "Stage",
-                      "type": "dropdown",
-                      "field": "stageName",
-                      "optionsMode": "distinctFromRows"
-                    },
-                    {
-                      "key": "search",
-                      "label": "Search",
-                      "type": "textSearch",
-                      "searchFields": [
-                        "taskId",
-                        "datasource",
-                        "clientName",
-                        "stageName",
-                        "classificationName",
-                        "taskDescription",
-                        "actionPlanText",
-                        "peopleLabel",
-                        "contactLabel"
-                      ]
-                    }
-                  ],
-                  "sort": {
-                    "type": "fieldList",
-                    "fields": [
-                      {
-                        "field": "sortDate",
-                        "direction": "asc",
-                        "nulls": "last"
-                      },
-                      {
-                        "field": "priority",
-                        "direction": "asc",
-                        "nulls": "last"
-                      }
-                    ]
-                  },
-                  "summary": [
-                    {
-                      "label": "Tasks",
-                      "type": "filteredCountOverTotal"
-                    },
-                    {
-                      "label": "Stage Counts",
-                      "type": "countByField",
-                      "field": "stageTag",
-                      "preferredOrder": ["L", "D", "S", "PO"]
-                    }
-                  ],
-                  "card": {
-                    "type": "taskStatus",
-                    "titleField": "clientName",
-                    "badgeField": "badgeLabel",
-                    "tone": {
-                      "type": "dateOrOpenDays",
-                      "dateField": "followUpDate",
-                      "openDaysField": "openDays",
-                      "stageDaysField": "stageDays",
-                      "upcomingDays": 7
-                    },
-                    "fields": [
-                      {
-                        "section": "body",
-                        "icon": "event_note",
-                        "label": "F-up",
-                        "field": "followupLabel"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "playlist_add_check",
-                        "field": "actionPlanText"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "assignment",
-                        "field": "taskDescription"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "support_agent",
-                        "field": "peopleLabel"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "category",
-                        "field": "subtitleLabel"
-                      },
-                      {
-                        "section": "body",
-                        "icon": "location",
-                        "field": "address"
-                      },
-                      {
-                        "section": "amount",
-                        "icon": "currency_rupee",
-                        "field": "leadAmountLabel"
-                      }
-                    ]
-                  },
-                  "attachments": {
-                    "enabled": true,
-                    "sourceTypeField": "datasource",
-                    "documentGuidField": "taskGuid",
-                    "fallbackBooleanField": "collateralAttached"
-                  },
-                  "actions": [
-                    {
-                      "actionCode": "OPEN_TASK_TARGET",
-                      "label": "Open",
-                      "icon": "chevron_right",
-                      "placement": "rowTrailing",
-                      "trigger": "rowTap",
-                      "actionType": "navigateLegacyTaskTarget",
-                      "successBehavior": "refreshWhenChildReturnsTrue"
-                    },
-                    {
-                      "actionCode": "TASK_ACTIONS",
-                      "label": "Task actions",
-                      "icon": "more_vert",
-                      "placement": "titleTap",
-                      "actionType": "openActionDialog",
-                      "dialog": {
-                        "actions": [
-                          "SET_WORKING_STATUS",
-                          "SET_PRIORITY",
-                          "VIEW_TASK_HISTORY"
-                        ]
-                      }
-                    },
-                    {
-                      "actionCode": "SET_WORKING_STATUS",
-                      "label": "Set Working Status",
-                      "actionType": "apiCall",
-                      "dataSourceCode": "CSPL_TASK_SET_WORKING_STATUS",
-                      "successBehavior": "localRowMutation"
-                    },
-                    {
-                      "actionCode": "SET_PRIORITY",
-                      "label": "Set Priority",
-                      "actionType": "apiCall",
-                      "dataSourceCode": "CSPL_TASK_SET_PRIORITY",
-                      "successBehavior": "refreshDashboard"
-                    },
-                    {
-                      "actionCode": "VIEW_TASK_HISTORY",
-                      "label": "View History",
-                      "actionType": "navigateLegacyTaskHistory"
-                    }
-                  ]
-                }
-                """));
-    }
-
-    private static List<Dictionary<string, object?>> CurrentOppRows()
-    {
-        return
-        [
-            new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["targetId"] = "OPP-1001",
-                ["customerName"] = "Apex Motors",
-                ["docNo"] = "CR01-1001",
-                ["stageLabel"] = "Negotiation",
-                ["followUpDate"] = "2026-07-28",
-                ["followUpDateLabel"] = "28/07/2026 Tuesday",
-                ["actionPlanText"] = "Call purchase manager and confirm demo feedback.",
-                ["opportunityDescription"] = "Fleet renewal discussion for 12 vehicles.",
-                ["salesPersonId"] = "SP-01",
-                ["salesPersonName"] = "Ravi Kumar",
-                ["agentId"] = "AG-07",
-                ["agentName"] = "Neha Shah",
-                ["contactText"] = "Amit Patel | 9876543210 | amit@example.com",
-                ["address"] = "Ahmedabad",
-                ["quoteAmount"] = 1850000,
-                ["orderAmount"] = 0,
-                ["attachmentDocumentGuid"] = "opp-guid-1001",
-                ["attachmentCount"] = 1,
-                ["nxtPgTemplate"] = "1",
-                ["nxtPgHeader"] = "ClassName=Generic_Udf_API&FunctionName=Remarks_Header",
-                ["nxtPgBody"] = "ClassName=Generic_Udf_API&FunctionName=Remarks_Body",
-                ["nxtPgFooter"] = "",
-                ["nxtPgImage"] = "",
-                ["nxtPgLabel"] = "Opportunity Remarks"
-            },
-            new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["targetId"] = "OPP-1002",
-                ["customerName"] = "Blue River Logistics",
-                ["docNo"] = "CR01-1002",
-                ["stageLabel"] = "Quotation",
-                ["followUpDate"] = "2026-07-20",
-                ["followUpDateLabel"] = "20/07/2026 Monday",
-                ["actionPlanText"] = "Send revised commercial offer.",
-                ["opportunityDescription"] = "Quotation pending for service contract.",
-                ["salesPersonId"] = "SP-02",
-                ["salesPersonName"] = "Meera Iyer",
-                ["agentId"] = "AG-04",
-                ["agentName"] = "Imran Khan",
-                ["contactText"] = "Sonal Desai | 9000011111",
-                ["address"] = "Surat",
-                ["quoteAmount"] = 420000,
-                ["orderAmount"] = 0,
-                ["attachmentDocumentGuid"] = "opp-guid-1002",
-                ["attachmentCount"] = 0,
-                ["nxtPgTemplate"] = "2",
-                ["nxtPgHeader"] = "ClassName=Generic_Udf_API&FunctionName=Remarks_Header",
-                ["nxtPgBody"] = "ClassName=Generic_Udf_API&FunctionName=Remarks_Body",
-                ["nxtPgFooter"] = "",
-                ["nxtPgImage"] = "",
-                ["nxtPgLabel"] = "Opportunity Detail"
-            }
+                    ["taskGuid"] = "task-guid-2001",
+                    ["datasource"] = "GN25",
+                    ["isWorking"] = false,
+                    ["priority"] = 1
+                },
+                new DashboardAttachmentRef("GN25", "task-guid-2001", 1),
+                [
+                    new("SET_WORKING_STATUS", true),
+                    new("SET_PRIORITY", true),
+                    new("VIEW_TASK_HISTORY", true)
+                ])
         ];
     }
 
-    private static List<Dictionary<string, object?>> TaskStatusRows()
-    {
-        return
-        [
-            new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["taskGuid"] = "task-guid-2001",
-                ["taskId"] = "GN25-2001",
-                ["apiId"] = "task-guid-2001",
-                ["datasource"] = "GN25",
-                ["isLead"] = false,
-                ["isSupport"] = true,
-                ["priority"] = 1,
-                ["currentStage"] = 2,
-                ["stageTag"] = "D",
-                ["stageId"] = "ST-02",
-                ["stageName"] = "Development",
-                ["stageLabel"] = "Development [D]",
-                ["stageDays"] = 3,
-                ["isNew"] = true,
-                ["isWorking"] = false,
-                ["collateralAttached"] = true,
-                ["clientName"] = "Apex Motors",
-                ["classificationName"] = "Enhancement",
-                ["taskDescription"] = "Add dynamic dashboard endpoint integration.",
-                ["contactPerson"] = "Amit Patel",
-                ["mobileGsm"] = "9876543210",
-                ["email"] = "amit@example.com",
-                ["contactLabel"] = "Amit Patel | 9876543210 | amit@example.com",
-                ["followUpDate"] = "2026-07-26",
-                ["followupLabel"] = "26/07/2026 Sunday | Development [D]",
-                ["eventDate"] = "2026-07-21",
-                ["openDays"] = 4,
-                ["sortDate"] = "2026-07-26",
-                ["totalCount"] = "08:30",
-                ["mainRemark"] = "Renderer API contract ready for Flutter mapping.",
-                ["actionPlanText"] = "Renderer API contract ready for Flutter mapping.",
-                ["destination"] = "GN25|task-guid-2001",
-                ["address"] = "Ahmedabad",
-                ["peopleLabel"] = "PM: Arjun | Dev: Devika",
-                ["subtitleLabel"] = "Enhancement | 3/4 Days",
-                ["badgeLabel"] = "GN25-2001 | Seq: 1",
-                ["leadAmountLabel"] = "",
-                ["canViewHistory"] = true,
-                ["canSetPriority"] = true,
-                ["canSetWorkingStatus"] = true,
-                ["canCloseTask"] = true,
-                ["canOpenDetails"] = true,
-                ["canOpenCardTarget"] = true,
-                ["canShowTaskActions"] = true
-            },
-            new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["taskGuid"] = "lead-guid-3001",
-                ["taskId"] = "CR01-3001",
-                ["apiId"] = "lead-guid-3001",
-                ["datasource"] = "CR01",
-                ["isLead"] = true,
-                ["isSupport"] = false,
-                ["priority"] = null,
-                ["currentStage"] = 1,
-                ["stageTag"] = "L",
-                ["stageId"] = "ST-01",
-                ["stageName"] = "Lead",
-                ["stageLabel"] = "Lead [L]",
-                ["stageDays"] = 1,
-                ["isNew"] = false,
-                ["isWorking"] = false,
-                ["collateralAttached"] = false,
-                ["clientName"] = "Blue River Logistics",
-                ["classificationName"] = "Opportunity",
-                ["taskDescription"] = "Follow-up on revised quote.",
-                ["contactPerson"] = "Sonal Desai",
-                ["mobileGsm"] = "9000011111",
-                ["email"] = "",
-                ["contactLabel"] = "Sonal Desai | 9000011111",
-                ["followUpDate"] = "2026-07-20",
-                ["followupLabel"] = "20/07/2026 Monday | Lead [L]",
-                ["eventDate"] = "2026-07-19",
-                ["openDays"] = 5,
-                ["sortDate"] = "2026-07-20",
-                ["totalCount"] = "",
-                ["mainRemark"] = "Customer requested revised terms.",
-                ["actionPlanText"] = "Customer requested revised terms.",
-                ["destination"] = "CR01|lead-guid-3001",
-                ["address"] = "Surat",
-                ["peopleLabel"] = "SP: Meera Iyer | Agent: Imran Khan",
-                ["subtitleLabel"] = "Opportunity | 1/5 Days",
-                ["badgeLabel"] = "CR01-3001",
-                ["leadAmountLabel"] = "Quote Amount: 420000",
-                ["canViewHistory"] = true,
-                ["canSetPriority"] = false,
-                ["canSetWorkingStatus"] = false,
-                ["canCloseTask"] = false,
-                ["canOpenDetails"] = true,
-                ["canOpenCardTarget"] = true,
-                ["canShowTaskActions"] = true
-            }
-        ];
-    }
-
-    private static List<Dictionary<string, object?>> FilterCurrentOppRows(
-        List<Dictionary<string, object?>> rows,
-        Dictionary<string, JsonElement>? filters)
-    {
-        var customer = ReadFilter(filters, "customer");
-        var salesPerson = ReadFilter(filters, "salesPerson");
-        var agent = ReadFilter(filters, "agent");
-        var search = ReadFilter(filters, "search");
-
-        return rows
-            .Where(row => IsBlankOrEquals(row, "customerName", customer))
-            .Where(row => IsBlankOrEquals(row, "salesPersonName", salesPerson))
-            .Where(row => IsBlankOrEquals(row, "agentName", agent))
-            .Where(row => IsBlankOrContainsAny(row, search))
-            .ToList();
-    }
-
-    private static List<Dictionary<string, object?>> FilterTaskRows(
-        List<Dictionary<string, object?>> rows,
-        Dictionary<string, JsonElement>? filters)
-    {
-        var customer = ReadFilter(filters, "customer");
-        var classification = ReadFilter(filters, "classification");
-        var stage = ReadFilter(filters, "stage");
-        var search = ReadFilter(filters, "search");
-
-        return rows
-            .Where(row => IsBlankOrEquals(row, "clientName", customer))
-            .Where(row => IsBlankOrEquals(row, "classificationName", classification))
-            .Where(row => IsBlankOrEquals(row, "stageName", stage))
-            .Where(row => IsBlankOrContainsAny(row, search))
-            .OrderBy(row => ReadString(row, "sortDate"))
-            .ThenBy(row => ReadString(row, "priority"))
-            .ToList();
-    }
-
-    private static DashboardActionResponse SetWorkingStatusResponse(
-        DashboardActionRequest request)
-    {
-        var isWorking = ReadInputBool(request, "isWorking") ?? false;
-        return new DashboardActionResponse(
-            true,
-            "Working status updated.",
-            "localRowMutation",
-            new Dictionary<string, object?>
-            {
-                ["isWorking"] = isWorking
-            });
-    }
-
-    private static DashboardActionResponse SetPriorityResponse(
-        DashboardActionRequest request)
-    {
-        var priority = ReadInputString(request, "priority");
-        if (string.IsNullOrWhiteSpace(priority) || priority == "0")
-        {
-            return new DashboardActionResponse(
-                false,
-                "Priority can't be blank.",
-                "showMessage");
-        }
-
-        return new DashboardActionResponse(
-            true,
-            "Priority updated.",
-            "refreshDashboard",
-            Data: new Dictionary<string, object?>
-            {
-                ["priority"] = priority
-            });
-    }
-
-    private static List<DashboardAttachment> AttachmentRows()
+    private static IReadOnlyList<DashboardAttachment> AttachmentRows()
     {
         return
         [
             new DashboardAttachment(
+                "4EF73BB5_628E_4A20_8F17_5C89B7C01502",
+                "ATT-1001",
                 "CR01",
                 "opp-guid-1001",
                 "opportunity-discussion.pdf",
+                "Commercial discussion",
                 "application/pdf",
                 152400,
-                null),
+                1,
+                new DateTimeOffset(2026, 7, 24, 8, 15, 0, TimeSpan.Zero),
+                true,
+                true),
             new DashboardAttachment(
+                "GN25_SCREEN_ID",
+                "ATT-2001",
                 "GN25",
                 "task-guid-2001",
                 "dashboard-api-notes.txt",
+                "Task notes",
                 "text/plain",
                 2048,
-                null)
+                1,
+                new DateTimeOffset(2026, 7, 24, 9, 0, 0, TimeSpan.Zero),
+                true,
+                true)
         ];
     }
 
-    private static JsonObject ParseObject(string json)
+    private static int FindAttachmentDeclaredCount(
+        string dashboardCode,
+        string sourceType,
+        string documentGuid)
     {
-        return JsonNode.Parse(json)?.AsObject()
-            ?? throw new InvalidOperationException("Invalid dashboard definition JSON.");
-    }
+        IEnumerable<NormalizedDashboardRow> rows = dashboardCode switch
+        {
+            CurrentOppCode => CurrentOppRows(),
+            TaskStatusCode => TaskStatusRows(),
+            _ => []
+        };
 
-    private static bool Matches(string actual, string? expected)
-    {
-        return string.IsNullOrWhiteSpace(expected) ||
-            actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
+        return rows
+            .Select(row => row.AttachmentRef)
+            .Where(reference => reference is not null)
+            .Where(reference =>
+                reference!.SourceType.Equals(
+                    sourceType,
+                    StringComparison.OrdinalIgnoreCase) &&
+                reference.DocumentGuid.Equals(
+                    documentGuid,
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(reference => reference!.DeclaredCount)
+            .SingleOrDefault();
     }
 
     private static string ReadFilter(
-        Dictionary<string, JsonElement>? filters,
+        IReadOnlyDictionary<string, JsonElement> filters,
         string key)
     {
-        if (filters is null || !filters.TryGetValue(key, out var value))
+        if (!filters.TryGetValue(key, out var value))
         {
             return string.Empty;
         }
 
-        return JsonElementToString(value);
-    }
-
-    private static string? ReadInputString(DashboardActionRequest request, string key)
-    {
-        if (request.Inputs is null || !request.Inputs.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-
-        return JsonElementToString(value);
-    }
-
-    private static bool? ReadInputBool(DashboardActionRequest request, string key)
-    {
-        if (request.Inputs is null || !request.Inputs.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
-            JsonValueKind.Number when value.TryGetInt32(out var number) => number != 0,
-            _ => null
-        };
-    }
-
-    private static string JsonElementToString(JsonElement value)
-    {
         return value.ValueKind switch
         {
             JsonValueKind.String => value.GetString()?.Trim() ?? string.Empty,
-            JsonValueKind.Number => value.ToString(),
-            JsonValueKind.True => "true",
-            JsonValueKind.False => "false",
-            _ => string.Empty
+            JsonValueKind.Null => string.Empty,
+            _ => value.ToString()
         };
     }
 
     private static bool IsBlankOrEquals(
-        Dictionary<string, object?> row,
+        NormalizedDashboardRow row,
         string field,
         string filter)
     {
         return string.IsNullOrWhiteSpace(filter) ||
-            ReadString(row, field).Equals(filter, StringComparison.OrdinalIgnoreCase);
+            ReadValue(row, field).Equals(
+                filter,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsBlankOrContainsAny(
-        Dictionary<string, object?> row,
+        NormalizedDashboardRow row,
         string search)
     {
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            return true;
-        }
-
-        return row.Values.Any(value => (value?.ToString() ?? string.Empty)
-            .Contains(search, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrWhiteSpace(search) ||
+            row.Values.Values.Any(value => (value?.ToString() ?? string.Empty)
+                .Contains(search, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string ReadString(Dictionary<string, object?> row, string field)
+    private static string ReadValue(NormalizedDashboardRow row, string field)
     {
-        return row.TryGetValue(field, out var value)
+        return row.Values.TryGetValue(field, out var value)
             ? value?.ToString() ?? string.Empty
             : string.Empty;
     }

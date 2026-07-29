@@ -1,6 +1,6 @@
 # Operational Dashboard Renderer Contract Review
 
-Status: **proposed contract; implementation approval pending**
+Status: **Current Opp in-memory POC implemented; production integrations pending**
 
 This package defines the ASP.NET Core Web API boundary for backend-driven
 operational dashboards. It does not approve or implement SQL execution,
@@ -22,19 +22,18 @@ the first POC.
 
 - [contract.md](contract.md) — DTOs, endpoint behavior, compatibility,
   versioning, whitelist rules, and preserved business behavior.
-- [openapi-review.yaml](openapi-review.yaml) — proposed review-time OpenAPI
+- [openapi-review.yaml](openapi-review.yaml) — reviewed design-time OpenAPI
   3.1 contract.
 - [database-schema.sql](database-schema.sql) — proposed SQL Server catalog
   tables; review only, not a migration.
 - [examples/current-opp-all-followups](examples/current-opp-all-followups) —
   representative Current Opp request/response bodies.
 - [generated/swagger-v1.generated.json](generated/swagger-v1.generated.json) —
-  runtime/build-generated snapshot of the endpoints currently present in the
-  ASP.NET Core scaffold.
+  runtime-generated snapshot of the implemented ASP.NET Core POC.
 
-The proposed OpenAPI file is the design under review. The generated document
-proves that the current controller surface can be discovered and exported; it
-does not mean missing proposal endpoints or business handlers are approved.
+The review OpenAPI remains the design reference. The generated document is the
+runtime source of truth for the in-memory POC and includes the same five route
+templates. Production data/action handlers remain outside this phase.
 
 ## Contract invariants
 
@@ -54,16 +53,14 @@ does not mean missing proposal endpoints or business handlers are approved.
 - Task Status preserves CR01/GN25 branching and only exposes actions allowed for
   the authenticated caller and the specific row.
 
-## Review gate
+## Production integration gate
 
-Before implementation, reviewers should approve:
+Before replacing the in-memory handlers, reviewers must approve:
 
-1. The stable envelope versus the current scaffold's flat row dictionaries.
-2. The five proposed endpoints, especially filter-option loading.
-3. Claims-derived user/tenant context instead of trusting `loginUserId` or
-   connection names in request JSON.
-4. The immutable publication/version model and legacy fallback rules.
-5. The whitelist registries and Task Status action permissions.
-6. Whether attachment content remains on the legacy download endpoint during
+1. Claims and policies for tenant, branch, financial year, and acting-user
+   access.
+2. The immutable publication store and rollback process.
+3. Production data-source, option-source, and Task Status action handlers.
+4. Auditing, rate limits, timeouts, metrics, and log redaction.
+5. Whether attachment content remains on the legacy download endpoint during
    the POC or is proxied by this API in a later contract revision.
-

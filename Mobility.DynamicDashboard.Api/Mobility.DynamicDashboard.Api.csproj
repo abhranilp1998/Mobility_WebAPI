@@ -7,7 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      Dapper remains in the complete repository snapshot but is intentionally
+      unused during this in-memory phase; no SQL/ASMX handler is registered.
+    -->
     <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <!--

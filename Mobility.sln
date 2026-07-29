@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mobility", "Mobility\Mobili
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mobility.DynamicDashboard.Api", "Mobility.DynamicDashboard.Api\Mobility.DynamicDashboard.Api.csproj", "{6E195672-84A4-4D71-A97A-845AF3D7E00A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mobility.DynamicDashboard.Api.Tests", "Mobility.DynamicDashboard.Api.Tests\Mobility.DynamicDashboard.Api.Tests.csproj", "{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,6 +40,18 @@ Global
 		{6E195672-84A4-4D71-A97A-845AF3D7E00A}.Release|x64.Build.0 = Release|Any CPU
 		{6E195672-84A4-4D71-A97A-845AF3D7E00A}.Release|x86.ActiveCfg = Release|Any CPU
 		{6E195672-84A4-4D71-A97A-845AF3D7E00A}.Release|x86.Build.0 = Release|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Debug|x64.Build.0 = Debug|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Debug|x86.Build.0 = Debug|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Release|x64.ActiveCfg = Release|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Release|x64.Build.0 = Release|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Release|x86.ActiveCfg = Release|Any CPU
+		{B28E9A3C-4B0B-4F7E-A15C-1B96DE0B9842}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

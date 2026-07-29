@@ -3,13 +3,12 @@
   "title": "Renderer is incompatible with this dashboard definition.",
   "status": 409,
   "detail": "Renderer version 1 does not support required capability dateProximityTone.",
-  "instance": "/api/v1/dashboards/CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID/definition",
+  "instance": "/api/v1/dashboards/843cb318_4007_4f62_91c5_fa400d1a31c5/definition",
   "code": "renderer_incompatible",
   "traceId": "00-7b92d258fc2f0e2df1188812136f4bb2-2d74bfe343832f8c-01",
   "retryable": false,
   "fallback": {
     "mode": "legacyScreen",
-    "screenId": "CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID"
+    "screenId": "843cb318_4007_4f62_91c5_fa400d1a31c5"
   }
 }
-

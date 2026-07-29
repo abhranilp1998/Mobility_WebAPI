@@ -1,7 +1,8 @@
 {
   "openapi": "3.1.1",
   "info": {
-    "title": "Mobility.DynamicDashboard.Api | v1",
+    "title": "Mobility Operational Dashboard Renderer API",
+    "description": "Backend-driven operational dashboard contract. Current Opp All Followups is the only fully implemented POC.",
     "version": "1.0.0"
   },
   "servers": [
@@ -15,33 +16,48 @@
         "tags": [
           "Dashboards"
         ],
-        "operationId": "GetDashboardDefinition",
+        "operationId": "getDashboardDefinition",
         "parameters": [
           {
             "name": "screenId",
             "in": "path",
             "required": true,
             "schema": {
+              "maxLength": 150,
+              "minLength": 1,
               "type": "string"
             }
           },
           {
             "name": "platform",
             "in": "query",
+            "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClientPlatform"
             }
           },
           {
             "name": "rendererVersion",
             "in": "query",
             "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
                 "integer",
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "capability",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         ],
@@ -66,22 +82,105 @@
               }
             }
           },
+          "304": {
+            "description": "Not Modified"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               }
             }
@@ -94,13 +193,23 @@
         "tags": [
           "Dashboards"
         ],
-        "operationId": "QueryDashboardRows",
+        "operationId": "queryDashboardRows",
         "parameters": [
           {
             "name": "dashboardCode",
             "in": "path",
             "required": true,
             "schema": {
+              "pattern": "^[A-Z0-9_]{3,100}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Dashboard-Definition-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
               "type": "string"
             }
           }
@@ -146,22 +255,277 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboards/{dashboardCode}/filters/{filterKey}/options": {
+      "get": {
+        "tags": [
+          "Dashboards"
+        ],
+        "operationId": "getDashboardFilterOptions",
+        "parameters": [
+          {
+            "name": "dashboardCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Z0-9_]{3,100}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "filterKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,99}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Dashboard-Definition-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "minLength": 0,
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardFilterOptionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardFilterOptionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardFilterOptionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               }
             }
@@ -174,13 +538,14 @@
         "tags": [
           "Dashboards"
         ],
-        "operationId": "ExecuteDashboardAction",
+        "operationId": "executeDashboardAction",
         "parameters": [
           {
             "name": "dashboardCode",
             "in": "path",
             "required": true,
             "schema": {
+              "pattern": "^[A-Z0-9_]{3,100}$",
               "type": "string"
             }
           },
@@ -188,6 +553,23 @@
             "name": "actionCode",
             "in": "path",
             "required": true,
+            "schema": {
+              "pattern": "^[A-Z0-9_]{3,100}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Dashboard-Definition-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
             "schema": {
               "type": "string"
             }
@@ -234,22 +616,102 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               }
             }
@@ -262,27 +724,32 @@
         "tags": [
           "Dashboards"
         ],
-        "operationId": "GetDashboardAttachments",
+        "operationId": "getDashboardAttachments",
         "parameters": [
           {
             "name": "dashboardCode",
             "in": "path",
             "required": true,
             "schema": {
+              "pattern": "^[A-Z0-9_]{3,100}$",
               "type": "string"
             }
           },
           {
             "name": "sourceType",
             "in": "query",
+            "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/AttachmentSourceType"
             }
           },
           {
             "name": "documentGuid",
             "in": "query",
+            "required": true,
             "schema": {
+              "maxLength": 100,
+              "minLength": 1,
               "type": "string"
             }
           }
@@ -308,22 +775,82 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/DashboardProblemDetails"
                 }
               }
             }
@@ -334,43 +861,107 @@
   },
   "components": {
     "schemas": {
+      "AttachmentSourceType": {
+        "enum": [
+          "CR01",
+          "GN25",
+          null
+        ]
+      },
+      "ClientPlatform": {
+        "enum": [
+          "android",
+          "ios",
+          "web",
+          "macos",
+          "windows",
+          null
+        ]
+      },
+      "DashboardActionDefinition": {
+        "required": [
+          "actionCode",
+          "label",
+          "kind",
+          "successEffect"
+        ],
+        "type": "object",
+        "properties": {
+          "actionCode": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "successEffect": {
+            "type": "string"
+          },
+          "navigationCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trigger": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placement": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "argumentFields": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "DashboardActionRequest": {
         "required": [
-          "row",
+          "rowKey",
           "inputs",
           "context"
         ],
         "type": "object",
         "properties": {
-          "row": {
+          "rowKey": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rowVersion": {
+            "maxLength": 200,
             "type": [
               "null",
-              "object"
+              "string"
             ]
           },
           "inputs": {
-            "type": [
-              "null",
-              "object"
-            ]
+            "type": "object"
           },
           "context": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/DashboardRequestContext"
-              }
-            ]
+            "$ref": "#/components/schemas/DashboardRequestContext"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "DashboardActionResponse": {
         "required": [
           "success",
           "message",
-          "successBehavior"
+          "clientEffect"
         ],
         "type": "object",
         "properties": {
@@ -380,34 +971,35 @@
           "message": {
             "type": "string"
           },
-          "successBehavior": {
-            "type": "string"
-          },
-          "localMutation": {
+          "newRowVersion": {
             "type": [
               "null",
-              "object"
+              "string"
             ]
           },
-          "data": {
-            "type": [
-              "null",
-              "object"
-            ]
+          "clientEffect": {
+            "$ref": "#/components/schemas/DashboardClientEffect"
           }
         }
       },
       "DashboardAttachment": {
         "required": [
+          "screenId",
+          "attachmentId",
           "sourceType",
           "documentGuid",
           "fileName",
-          "contentType",
-          "sizeBytes",
-          "downloadUrl"
+          "canPreview",
+          "canDownload"
         ],
         "type": "object",
         "properties": {
+          "screenId": {
+            "type": "string"
+          },
+          "attachmentId": {
+            "type": "string"
+          },
           "sourceType": {
             "type": "string"
           },
@@ -416,6 +1008,12 @@
           },
           "fileName": {
             "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "contentType": {
             "type": [
@@ -432,7 +1030,64 @@
             ],
             "format": "int64"
           },
-          "downloadUrl": {
+          "serialNumber": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "canPreview": {
+            "type": "boolean"
+          },
+          "canDownload": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DashboardAttachmentDefinition": {
+        "required": [
+          "enabled",
+          "documentGuidField",
+          "loadMode",
+          "openActionCode"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "documentGuidField": {
+            "type": "string"
+          },
+          "loadMode": {
+            "type": "string"
+          },
+          "openActionCode": {
+            "type": "string"
+          },
+          "sourceType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sourceTypeField": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "declaredCountField": {
             "type": [
               "null",
               "string"
@@ -440,15 +1095,65 @@
           }
         }
       },
+      "DashboardAttachmentRef": {
+        "required": [
+          "sourceType",
+          "documentGuid",
+          "declaredCount"
+        ],
+        "type": "object",
+        "properties": {
+          "sourceType": {
+            "type": "string"
+          },
+          "documentGuid": {
+            "type": "string"
+          },
+          "declaredCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "DashboardAttachmentsResponse": {
         "required": [
           "dashboardCode",
+          "sourceType",
+          "documentGuid",
+          "declaredCount",
+          "returnedCount",
           "attachments"
         ],
         "type": "object",
         "properties": {
           "dashboardCode": {
             "type": "string"
+          },
+          "sourceType": {
+            "type": "string"
+          },
+          "documentGuid": {
+            "type": "string"
+          },
+          "declaredCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "returnedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           },
           "attachments": {
             "type": "array",
@@ -458,16 +1163,212 @@
           }
         }
       },
+      "DashboardCardDefinition": {
+        "required": [
+          "template",
+          "titleField",
+          "fields"
+        ],
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string"
+          },
+          "titleField": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardCardField"
+            }
+          },
+          "badge": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "tone": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        }
+      },
+      "DashboardCardField": {
+        "required": [
+          "code",
+          "section",
+          "fields",
+          "displayOrder"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "displayOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "iconCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prefixes": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "joinWith": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valueType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "DashboardClientEffect": {
+        "required": [
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/DashboardClientEffectType"
+          },
+          "rowPatch": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "navigationCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "arguments": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        }
+      },
+      "DashboardClientEffectType": {
+        "enum": [
+          "none",
+          "refreshDashboard",
+          "refreshRow",
+          "localRowPatch",
+          "clientNavigation"
+        ]
+      },
+      "DashboardDefinition": {
+        "required": [
+          "layout",
+          "rowIdentityField",
+          "filters",
+          "card",
+          "actions"
+        ],
+        "type": "object",
+        "properties": {
+          "layout": {
+            "type": "string"
+          },
+          "rowIdentityField": {
+            "type": "string"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardFilterDefinition"
+            }
+          },
+          "grouping": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DashboardGrouping"
+              }
+            ]
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardSummary"
+            }
+          },
+          "card": {
+            "$ref": "#/components/schemas/DashboardCardDefinition"
+          },
+          "attachments": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DashboardAttachmentDefinition"
+              }
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardActionDefinition"
+            }
+          }
+        }
+      },
       "DashboardDefinitionResponse": {
         "required": [
           "screenId",
           "dashboardCode",
           "title",
-          "rendererType",
+          "definitionVersion",
           "rendererSchemaVersion",
           "minRendererVersion",
           "requiredCapabilities",
           "dataSourceCode",
+          "etag",
           "fallback",
           "definition"
         ],
@@ -482,7 +1383,7 @@
           "title": {
             "type": "string"
           },
-          "rendererType": {
+          "definitionVersion": {
             "type": "string"
           },
           "rendererSchemaVersion": {
@@ -510,11 +1411,14 @@
           "dataSourceCode": {
             "type": "string"
           },
+          "etag": {
+            "type": "string"
+          },
           "fallback": {
             "$ref": "#/components/schemas/DashboardFallback"
           },
           "definition": {
-            "$ref": "#/components/schemas/JsonObject"
+            "$ref": "#/components/schemas/DashboardDefinition"
           }
         }
       },
@@ -529,6 +1433,9 @@
             "type": "string"
           },
           "screenId": {
+            "type": "string"
+          },
+          "reason": {
             "type": [
               "null",
               "string"
@@ -536,15 +1443,33 @@
           }
         }
       },
-      "DashboardPageInfo": {
+      "DashboardFilterDefinition": {
         "required": [
-          "pageNumber",
-          "pageSize",
-          "hasMore"
+          "key",
+          "label",
+          "controlType",
+          "valueType",
+          "required",
+          "displayOrder"
         ],
         "type": "object",
         "properties": {
-          "pageNumber": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "controlType": {
+            "type": "string"
+          },
+          "valueType": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "displayOrder": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -552,167 +1477,132 @@
             ],
             "format": "int32"
           },
-          "pageSize": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
+          "field": {
             "type": [
-              "integer",
+              "null",
               "string"
-            ],
-            "format": "int32"
+            ]
           },
-          "hasMore": {
+          "searchFields": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "optionsMode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "optionSourceCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "defaultValue": { }
+        }
+      },
+      "DashboardFilterOption": {
+        "required": [
+          "id",
+          "label",
+          "disabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "populationRef": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "disabled": {
             "type": "boolean"
           }
         }
       },
-      "DashboardRequestContext": {
-        "required": [
-          "loginUserId",
-          "userId",
-          "branchId",
-          "financialYearId",
-          "platform",
-          "rendererVersion"
-        ],
-        "type": "object",
-        "properties": {
-          "loginUserId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "userId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "branchId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "financialYearId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "platform": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "rendererVersion": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          }
-        }
-      },
-      "DashboardRowsRequest": {
-        "required": [
-          "filters",
-          "context",
-          "pageNumber",
-          "pageSize"
-        ],
-        "type": "object",
-        "properties": {
-          "filters": {
-            "type": [
-              "null",
-              "object"
-            ]
-          },
-          "context": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/DashboardRequestContext"
-              }
-            ]
-          },
-          "pageNumber": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "pageSize": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          }
-        }
-      },
-      "DashboardRowsResponse": {
+      "DashboardFilterOptionsResponse": {
         "required": [
           "dashboardCode",
-          "totalCount",
-          "returnedCount",
-          "rows",
-          "page"
+          "definitionVersion",
+          "filterKey",
+          "options"
         ],
         "type": "object",
         "properties": {
           "dashboardCode": {
             "type": "string"
           },
-          "totalCount": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
+          "definitionVersion": {
+            "type": "string"
           },
-          "returnedCount": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
+          "filterKey": {
+            "type": "string"
           },
-          "rows": {
+          "options": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/DashboardFilterOption"
             }
           },
-          "page": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/DashboardPageInfo"
-              }
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }
       },
-      "JsonObject": {
-        "type": "object"
+      "DashboardGrouping": {
+        "required": [
+          "field",
+          "label",
+          "emptyValue",
+          "sort",
+          "initiallyCollapsed",
+          "showCount"
+        ],
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "emptyValue": {
+            "type": "string"
+          },
+          "sort": {
+            "type": "string"
+          },
+          "initiallyCollapsed": {
+            "type": "boolean"
+          },
+          "showCount": {
+            "type": "boolean"
+          }
+        }
       },
-      "ProblemDetails": {
+      "DashboardProblemDetails": {
+        "required": [
+          "title",
+          "status",
+          "code",
+          "traceId",
+          "retryable"
+        ],
         "type": "object",
         "properties": {
           "type": {
@@ -747,11 +1637,377 @@
               "null",
               "string"
             ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "fallback": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DashboardFallback"
+              }
+            ]
+          },
+          "errors": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
+      },
+      "DashboardRequestContext": {
+        "required": [
+          "platform",
+          "rendererVersion",
+          "capabilities"
+        ],
+        "type": "object",
+        "properties": {
+          "actingUserId": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "branchId": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "financialYearId": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "platform": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientPlatform"
+              }
+            ]
+          },
+          "rendererVersion": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "capabilities": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locale": {
+            "maxLength": 35,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeZone": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DashboardRowCommand": {
+        "required": [
+          "actionCode",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "actionCode": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "disabledReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "DashboardRowsRequest": {
+        "required": [
+          "filters",
+          "sort",
+          "context",
+          "page"
+        ],
+        "type": "object",
+        "properties": {
+          "filters": {
+            "type": "object"
+          },
+          "sort": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardSort"
+            }
+          },
+          "context": {
+            "$ref": "#/components/schemas/DashboardRequestContext"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageRequest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DashboardRowsResponse": {
+        "required": [
+          "dashboardCode",
+          "definitionVersion",
+          "dataRevision",
+          "totalCount",
+          "returnedCount",
+          "rows",
+          "page"
+        ],
+        "type": "object",
+        "properties": {
+          "dashboardCode": {
+            "type": "string"
+          },
+          "definitionVersion": {
+            "type": "string"
+          },
+          "dataRevision": {
+            "type": "string"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "returnedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormalizedDashboardRow"
+            }
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageResponse"
+          }
+        }
+      },
+      "DashboardSort": {
+        "required": [
+          "field",
+          "direction"
+        ],
+        "type": "object",
+        "properties": {
+          "field": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "direction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SortDirection"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DashboardSummary": {
+        "required": [
+          "code",
+          "label",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "field": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NormalizedDashboardRow": {
+        "required": [
+          "rowKey",
+          "values",
+          "commands"
+        ],
+        "type": "object",
+        "properties": {
+          "rowKey": {
+            "type": "string"
+          },
+          "rowVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "values": {
+            "type": "object"
+          },
+          "attachmentRef": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DashboardAttachmentRef"
+              }
+            ]
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardRowCommand"
+            }
+          }
+        }
+      },
+      "PageRequest": {
+        "required": [
+          "number",
+          "size"
+        ],
+        "type": "object",
+        "properties": {
+          "number": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "size": {
+            "maximum": 200,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PageResponse": {
+        "required": [
+          "number",
+          "size",
+          "hasMore"
+        ],
+        "type": "object",
+        "properties": {
+          "number": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "size": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SortDirection": {
+        "enum": [
+          "asc",
+          "desc",
+          null
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "description": "Production bearer token. Development can use the explicitly configured local authentication bypass.",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     }
   },
+  "security": [
+    {
+      "bearerAuth": [ ]
+    }
+  ],
   "tags": [
     {
       "name": "Dashboards"

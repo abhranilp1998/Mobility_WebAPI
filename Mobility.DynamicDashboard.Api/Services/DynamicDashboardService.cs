@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Mobility.DynamicDashboard.Api.Data;
 using Mobility.DynamicDashboard.Api.Models;
 
@@ -6,74 +7,540 @@ namespace Mobility.DynamicDashboard.Api.Services;
 public sealed class DynamicDashboardService(IDashboardRepository repository)
     : IDynamicDashboardService
 {
-    public Task<DashboardDefinitionResponse?> GetDefinitionAsync(
-        string screenId,
-        string? platform,
-        int? rendererVersion,
-        CancellationToken cancellationToken)
+    private static readonly HashSet<string> CurrentOppFilters =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "customer",
+            "salesPerson",
+            "agent",
+            "search"
+        };
+
+    private static readonly HashSet<string> CurrentOppSortFields =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "customerName",
+            "stageLabel",
+            "followUpDate",
+            "salesPersonName",
+            "agentName"
+        };
+
+    public async Task<DashboardServiceResult<DashboardDefinitionResponse>>
+        GetDefinitionAsync(
+            string screenId,
+            ClientPlatform? platform,
+            int rendererVersion,
+            IReadOnlyList<string> capabilities,
+            CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(screenId))
         {
-            return Task.FromResult<DashboardDefinitionResponse?>(null);
+            return BadRequest<DashboardDefinitionResponse>(
+                "invalid_screen_id",
+                "The screen identifier is required.");
         }
 
-        return repository.GetDefinitionAsync(
+        if (platform is null)
+        {
+            return BadRequest<DashboardDefinitionResponse>(
+                "invalid_platform",
+                "A supported platform is required.");
+        }
+
+        if (rendererVersion < 1)
+        {
+            return BadRequest<DashboardDefinitionResponse>(
+                "invalid_renderer_version",
+                "rendererVersion must be at least 1.");
+        }
+
+        var definition = await repository.GetDefinitionAsync(
             screenId.Trim(),
-            platform?.Trim(),
-            rendererVersion,
             cancellationToken);
+
+        if (definition is null)
+        {
+            return NotFound<DashboardDefinitionResponse>(
+                "dashboard_not_found",
+                "No published dashboard is registered for this screen identifier.");
+        }
+
+        if (rendererVersion < definition.MinRendererVersion)
+        {
+            return Incompatible(
+                definition,
+                $"Renderer version {rendererVersion} is below the required version {definition.MinRendererVersion}.");
+        }
+
+        var compiledCapabilities = capabilities
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missingCapabilities = definition.RequiredCapabilities
+            .Where(required => !compiledCapabilities.Contains(required))
+            .ToArray();
+
+        if (missingCapabilities.Length > 0)
+        {
+            return Incompatible(
+                definition,
+                $"Renderer does not support required capabilities: {string.Join(", ", missingCapabilities)}.");
+        }
+
+        return DashboardServiceResult<DashboardDefinitionResponse>.Success(
+            definition);
     }
 
-    public Task<DashboardRowsResponse?> GetRowsAsync(
+    public async Task<DashboardServiceResult<DashboardRowsResponse>> GetRowsAsync(
         string dashboardCode,
+        string definitionVersion,
+        string callerId,
         DashboardRowsRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(dashboardCode))
+        var versionFailure = ValidateDefinitionVersion<DashboardRowsResponse>(
+            dashboardCode,
+            definitionVersion);
+        if (versionFailure is not null)
         {
-            return Task.FromResult<DashboardRowsResponse?>(null);
+            return versionFailure;
         }
 
-        return repository.GetRowsAsync(
+        var callerFailure = ValidateCaller<DashboardRowsResponse>(
+            callerId,
+            request.Context);
+        if (callerFailure is not null)
+        {
+            return callerFailure;
+        }
+
+        var unknownFilters = request.Filters.Keys
+            .Where(key => !CurrentOppFilters.Contains(key))
+            .ToArray();
+        if (unknownFilters.Length > 0)
+        {
+            return BadRequest<DashboardRowsResponse>(
+                "invalid_filter",
+                $"Undeclared filters are not allowed: {string.Join(", ", unknownFilters)}.");
+        }
+
+        var nonScalarFilters = request.Filters
+            .Where(pair => pair.Value.ValueKind is not (
+                JsonValueKind.String or
+                JsonValueKind.Null))
+            .Select(pair => pair.Key)
+            .ToArray();
+        if (nonScalarFilters.Length > 0)
+        {
+            return BadRequest<DashboardRowsResponse>(
+                "invalid_filter_value",
+                $"Current Opp filters accept string or null values: {string.Join(", ", nonScalarFilters)}.");
+        }
+
+        var invalidSortFields = request.Sort
+            .Where(sort => !CurrentOppSortFields.Contains(sort.Field))
+            .Select(sort => sort.Field)
+            .ToArray();
+        if (invalidSortFields.Length > 0)
+        {
+            return BadRequest<DashboardRowsResponse>(
+                "invalid_sort",
+                $"Unsupported sort fields: {string.Join(", ", invalidSortFields)}.");
+        }
+
+        var filteredRows = await repository.QueryRowsAsync(
             dashboardCode.Trim(),
             request,
             cancellationToken);
+        if (filteredRows is null)
+        {
+            return NotFound<DashboardRowsResponse>(
+                "dashboard_not_found",
+                "No row handler is registered for this dashboard.");
+        }
+
+        var totalCount = filteredRows.Count;
+        var offset = ((long)request.Page.Number - 1) * request.Page.Size;
+        var pageRows = offset >= filteredRows.Count
+            ? []
+            : filteredRows
+                .Skip((int)offset)
+                .Take(request.Page.Size)
+                .ToList();
+
+        return DashboardServiceResult<DashboardRowsResponse>.Success(
+            new DashboardRowsResponse(
+                InMemoryDashboardRepository.CurrentOppCode,
+                InMemoryDashboardRepository.DefinitionVersion,
+                "current-opp-memory-r1",
+                totalCount,
+                pageRows.Count,
+                pageRows,
+                new PageResponse(
+                    request.Page.Number,
+                    request.Page.Size,
+                    offset + pageRows.Count < totalCount)));
     }
 
-    public Task<DashboardActionResponse?> ExecuteActionAsync(
-        string dashboardCode,
+    public async Task<DashboardServiceResult<DashboardFilterOptionsResponse>>
+        GetFilterOptionsAsync(
+            string dashboardCode,
+            string filterKey,
+            string definitionVersion,
+            string? search,
+            string? cursor,
+            CancellationToken cancellationToken)
+    {
+        var versionFailure =
+            ValidateDefinitionVersion<DashboardFilterOptionsResponse>(
+                dashboardCode,
+                definitionVersion);
+        if (versionFailure is not null)
+        {
+            return versionFailure;
+        }
+
+        if (search?.Length > 100)
+        {
+            return BadRequest<DashboardFilterOptionsResponse>(
+                "invalid_search",
+                "search cannot exceed 100 characters.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            return BadRequest<DashboardFilterOptionsResponse>(
+                "invalid_cursor",
+                "The in-memory POC has one option page and does not issue cursors.");
+        }
+
+        var response = await repository.GetFilterOptionsAsync(
+            dashboardCode.Trim(),
+            filterKey.Trim(),
+            search?.Trim(),
+            cursor,
+            cancellationToken);
+
+        return response is null
+            ? NotFound<DashboardFilterOptionsResponse>(
+                "filter_option_source_not_found",
+                "The filter key is not registered in the option-source whitelist.")
+            : DashboardServiceResult<DashboardFilterOptionsResponse>.Success(
+                response);
+    }
+
+    public async Task<DashboardServiceResult<DashboardActionResponse>>
+        ExecuteActionAsync(
+            string dashboardCode,
+            string actionCode,
+            string definitionVersion,
+            string? idempotencyKey,
+            string callerId,
+            DashboardActionRequest request,
+            CancellationToken cancellationToken)
+    {
+        var registration = repository.GetActionRegistration(
+            dashboardCode.Trim(),
+            actionCode.Trim());
+        if (registration is null)
+        {
+            return NotFound<DashboardActionResponse>(
+                "action_not_found",
+                "The action is not registered for this dashboard.");
+        }
+
+        if (!definitionVersion.Equals(
+                registration.DefinitionVersion,
+                StringComparison.Ordinal))
+        {
+            return DefinitionChanged<DashboardActionResponse>(
+                registration.DefinitionVersion);
+        }
+
+        var callerFailure = ValidateCaller<DashboardActionResponse>(
+            callerId,
+            request.Context);
+        if (callerFailure is not null)
+        {
+            return callerFailure;
+        }
+
+        if (registration.IsMutation &&
+            (string.IsNullOrWhiteSpace(idempotencyKey) ||
+             idempotencyKey.Length is < 16 or > 100))
+        {
+            return BadRequest<DashboardActionResponse>(
+                "idempotency_key_required",
+                "A 16 to 100 character Idempotency-Key is required for mutating actions.");
+        }
+
+        var row = await repository.FindRowAsync(
+            registration.DashboardCode,
+            request.RowKey.Trim(),
+            cancellationToken);
+        if (row is null)
+        {
+            return NotFound<DashboardActionResponse>(
+                "row_not_found",
+                "The authoritative row could not be found.");
+        }
+
+        var command = row.Commands.SingleOrDefault(item =>
+            item.ActionCode.Equals(
+                registration.ActionCode,
+                StringComparison.OrdinalIgnoreCase));
+        if (command is null || !command.Enabled)
+        {
+            return DashboardServiceResult<DashboardActionResponse>.Failure(
+                StatusCodes.Status403Forbidden,
+                "action_forbidden",
+                "The action is not allowed for this row.",
+                command?.DisabledReason);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.RowVersion) &&
+            !request.RowVersion.Equals(row.RowVersion, StringComparison.Ordinal))
+        {
+            return DashboardServiceResult<DashboardActionResponse>.Failure(
+                StatusCodes.Status409Conflict,
+                "row_changed",
+                "The row changed after it was loaded.",
+                "Refresh the dashboard row and retry with its current rowVersion.");
+        }
+
+        var replayKey = registration.IsMutation
+            ? $"{callerId}|{registration.DashboardCode}|{registration.ActionCode}|{row.RowKey}|{idempotencyKey}"
+            : null;
+        if (replayKey is not null)
+        {
+            var replay = repository.GetIdempotentActionResponse(replayKey);
+            if (replay is not null)
+            {
+                return DashboardServiceResult<DashboardActionResponse>.Success(
+                    replay);
+            }
+        }
+
+        var actionResponse = BuildActionResponse(
+            registration.ActionCode,
+            row,
+            request);
+        if (actionResponse is null)
+        {
+            return BadRequest<DashboardActionResponse>(
+                "invalid_action_input",
+                "The action inputs do not match the registered input contract.");
+        }
+
+        if (replayKey is not null)
+        {
+            repository.StoreIdempotentActionResponse(replayKey, actionResponse);
+        }
+
+        return DashboardServiceResult<DashboardActionResponse>.Success(
+            actionResponse);
+    }
+
+    public async Task<DashboardServiceResult<DashboardAttachmentsResponse>>
+        GetAttachmentsAsync(
+            string dashboardCode,
+            AttachmentSourceType sourceType,
+            string documentGuid,
+            CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(documentGuid))
+        {
+            return BadRequest<DashboardAttachmentsResponse>(
+                "invalid_document_guid",
+                "documentGuid is required.");
+        }
+
+        if (documentGuid.Length > 100)
+        {
+            return BadRequest<DashboardAttachmentsResponse>(
+                "invalid_document_guid",
+                "documentGuid cannot exceed 100 characters.");
+        }
+
+        var response = await repository.GetAttachmentsAsync(
+            dashboardCode.Trim(),
+            sourceType,
+            documentGuid.Trim(),
+            cancellationToken);
+
+        return response is null
+            ? NotFound<DashboardAttachmentsResponse>(
+                "dashboard_not_found",
+                "No attachment handler is registered for this dashboard.")
+            : DashboardServiceResult<DashboardAttachmentsResponse>.Success(
+                response);
+    }
+
+    private static DashboardActionResponse? BuildActionResponse(
         string actionCode,
-        DashboardActionRequest request,
-        CancellationToken cancellationToken)
+        NormalizedDashboardRow row,
+        DashboardActionRequest request)
     {
-        if (string.IsNullOrWhiteSpace(dashboardCode) ||
-            string.IsNullOrWhiteSpace(actionCode))
+        return actionCode switch
         {
-            return Task.FromResult<DashboardActionResponse?>(null);
-        }
-
-        return repository.ExecuteActionAsync(
-            dashboardCode.Trim(),
-            actionCode.Trim(),
-            request,
-            cancellationToken);
+            "OPEN_OPPORTUNITY" => new DashboardActionResponse(
+                true,
+                "Open the registered opportunity template.",
+                row.RowVersion,
+                new DashboardClientEffect(
+                    DashboardClientEffectType.ClientNavigation,
+                    NavigationCode: "OPEN_OPPORTUNITY_TEMPLATE",
+                    Arguments: new()
+                    {
+                        ["targetId"] = row.Values["targetId"],
+                        ["templateVariant"] = row.Values["templateVariant"]
+                    })),
+            "OPEN_ATTACHMENTS" => new DashboardActionResponse(
+                true,
+                "Open the attachment dialog using the row attachment reference.",
+                row.RowVersion,
+                new DashboardClientEffect(DashboardClientEffectType.None)),
+            "VIEW_TASK_HISTORY" => new DashboardActionResponse(
+                true,
+                "Open the registered task-history route.",
+                row.RowVersion,
+                new DashboardClientEffect(
+                    DashboardClientEffectType.ClientNavigation,
+                    NavigationCode: "VIEW_TASK_HISTORY",
+                    Arguments: new()
+                    {
+                        ["rowKey"] = row.RowKey
+                    })),
+            "SET_WORKING_STATUS" when TryReadBoolean(
+                request.Inputs,
+                "isWorking",
+                out var isWorking) => new DashboardActionResponse(
+                    true,
+                    "Mocked Task Status working-state mutation accepted.",
+                    row.RowVersion,
+                    new DashboardClientEffect(
+                        DashboardClientEffectType.LocalRowPatch,
+                        RowPatch: new()
+                        {
+                            ["isWorking"] = isWorking
+                        })),
+            "SET_PRIORITY" when TryReadPriority(
+                request.Inputs,
+                out _) => new DashboardActionResponse(
+                    true,
+                    "Mocked Task Status priority mutation accepted.",
+                    row.RowVersion,
+                    new DashboardClientEffect(
+                        DashboardClientEffectType.RefreshRow)),
+            _ => null
+        };
     }
 
-    public Task<DashboardAttachmentsResponse?> GetAttachmentsAsync(
+    private static bool TryReadBoolean(
+        IReadOnlyDictionary<string, JsonElement> inputs,
+        string key,
+        out bool value)
+    {
+        value = false;
+        if (!inputs.TryGetValue(key, out var element))
+        {
+            return false;
+        }
+
+        if (element.ValueKind == JsonValueKind.True)
+        {
+            value = true;
+            return true;
+        }
+
+        return element.ValueKind == JsonValueKind.False;
+    }
+
+    private static bool TryReadPriority(
+        IReadOnlyDictionary<string, JsonElement> inputs,
+        out int priority)
+    {
+        priority = 0;
+        return inputs.TryGetValue("priority", out var element) &&
+            element.TryGetInt32(out priority) &&
+            priority > 0;
+    }
+
+    private static DashboardServiceResult<T>? ValidateDefinitionVersion<T>(
         string dashboardCode,
-        string? sourceType,
-        string? documentGuid,
-        CancellationToken cancellationToken)
+        string definitionVersion)
     {
-        if (string.IsNullOrWhiteSpace(dashboardCode))
+        if (!dashboardCode.Equals(
+                InMemoryDashboardRepository.CurrentOppCode,
+                StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult<DashboardAttachmentsResponse?>(null);
+            return NotFound<T>(
+                "dashboard_not_found",
+                "No handler is registered for this dashboard.");
         }
 
-        return repository.GetAttachmentsAsync(
-            dashboardCode.Trim(),
-            sourceType?.Trim(),
-            documentGuid?.Trim(),
-            cancellationToken);
+        return definitionVersion.Equals(
+            InMemoryDashboardRepository.DefinitionVersion,
+            StringComparison.Ordinal)
+                ? null
+                : DefinitionChanged<T>(
+                    InMemoryDashboardRepository.DefinitionVersion);
     }
+
+    private static DashboardServiceResult<T>? ValidateCaller<T>(
+        string callerId,
+        DashboardRequestContext context)
+    {
+        if (!string.IsNullOrWhiteSpace(context.ActingUserId) &&
+            !context.ActingUserId.Equals(
+                callerId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return DashboardServiceResult<T>.Failure(
+                StatusCodes.Status403Forbidden,
+                "acting_user_forbidden",
+                "The caller cannot act as the requested user.");
+        }
+
+        return null;
+    }
+
+    private static DashboardServiceResult<T> BadRequest<T>(
+        string code,
+        string detail) =>
+        DashboardServiceResult<T>.Failure(
+            StatusCodes.Status400BadRequest,
+            code,
+            "Request validation failed.",
+            detail);
+
+    private static DashboardServiceResult<T> NotFound<T>(
+        string code,
+        string detail) =>
+        DashboardServiceResult<T>.Failure(
+            StatusCodes.Status404NotFound,
+            code,
+            "The requested dashboard resource was not found.",
+            detail);
+
+    private static DashboardServiceResult<T> DefinitionChanged<T>(
+        string currentVersion) =>
+        DashboardServiceResult<T>.Failure(
+            StatusCodes.Status409Conflict,
+            "definition_changed",
+            "The dashboard definition changed.",
+            $"Refresh the definition and retry with version {currentVersion}.");
+
+    private static DashboardServiceResult<DashboardDefinitionResponse>
+        Incompatible(
+            DashboardDefinitionResponse definition,
+            string detail) =>
+        DashboardServiceResult<DashboardDefinitionResponse>.Failure(
+            StatusCodes.Status409Conflict,
+            "renderer_incompatible",
+            "Renderer is incompatible with this dashboard definition.",
+            detail,
+            definition.Fallback);
 }

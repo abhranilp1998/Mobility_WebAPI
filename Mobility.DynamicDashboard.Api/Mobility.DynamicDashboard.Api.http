@@ -1,16 +1,20 @@
 @Mobility.DynamicDashboard.Api_HostAddress = http://localhost:5282
+@DefinitionVersion = 1.0.0
 
 GET {{Mobility.DynamicDashboard.Api_HostAddress}}/health
 Accept: application/json
 
 ###
 
-GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CURRENT_OPP_ALL_FOLLOWUPS_SCREEN_ID/definition?platform=web&rendererVersion=1
+# Current Opp definition. Every required compiled capability is repeated.
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/843cb318_4007_4f62_91c5_fa400d1a31c5/definition?platform=web&rendererVersion=1&capability=groupedCardList&capability=dropdownFilter&capability=textSearch&capability=dateProximityTone&capability=attachmentDialog&capability=clientNavigation
 Accept: application/json
 
 ###
 
+# Current Opp normalized rows. The definition version guards the request.
 POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_CURRENT_OPP_ALL_FOLLOWUPS/rows
+X-Dashboard-Definition-Version: {{DefinitionVersion}}
 Content-Type: application/json
 Accept: application/json
 
@@ -19,88 +23,65 @@ Accept: application/json
     "customer": "",
     "salesPerson": "",
     "agent": "",
-    "search": ""
+    "search": "fleet"
   },
+  "sort": [],
   "context": {
-    "loginUserId": "demo",
-    "branchId": "1",
-    "financialYearId": "1",
+    "actingUserId": "development-user",
+    "branchId": "BR-01",
+    "financialYearId": "FY-2026",
     "platform": "web",
-    "rendererVersion": 1
+    "rendererVersion": 1,
+    "capabilities": [
+      "groupedCardList",
+      "dropdownFilter",
+      "textSearch",
+      "dateProximityTone",
+      "attachmentDialog",
+      "clientNavigation"
+    ],
+    "locale": "en-IN",
+    "timeZone": "Asia/Kolkata"
   },
-  "pageNumber": 1,
-  "pageSize": 50
+  "page": {
+    "number": 1,
+    "size": 50
+  }
 }
 
 ###
 
-GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/TASK_STATUS_SCREEN_ID/definition?platform=web&rendererVersion=1
+# Whitelist-backed typed filter options; no legacy source/filter clause.
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_CURRENT_OPP_ALL_FOLLOWUPS/filters/customer/options?search=apex
+X-Dashboard-Definition-Version: {{DefinitionVersion}}
 Accept: application/json
 
 ###
 
-POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/rows
-Content-Type: application/json
+# Fresh attachment metadata is supplementary to row loading.
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_CURRENT_OPP_ALL_FOLLOWUPS/attachments?sourceType=CR01&documentGuid=opp-guid-1001
 Accept: application/json
-
-{
-  "filters": {
-    "customer": "",
-    "classification": "",
-    "stage": "",
-    "search": ""
-  },
-  "context": {
-    "loginUserId": "demo",
-    "userId": "demo",
-    "branchId": "1",
-    "financialYearId": "1",
-    "platform": "web",
-    "rendererVersion": 1
-  },
-  "pageNumber": 1,
-  "pageSize": 50
-}
 
 ###
 
+# Task Status mutations remain mocked but retain the reviewed row identity,
+# version, whitelist, and idempotency boundaries.
 POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/actions/SET_WORKING_STATUS
+X-Dashboard-Definition-Version: {{DefinitionVersion}}
+Idempotency-Key: task-working-status-2001
 Content-Type: application/json
 Accept: application/json
 
 {
-  "row": {
-    "apiId": "task-guid-2001"
-  },
+  "rowKey": "task-guid-2001",
+  "rowVersion": "row-task-2001-v1",
   "inputs": {
     "isWorking": true
   },
   "context": {
-    "loginUserId": "demo"
+    "actingUserId": "development-user",
+    "platform": "web",
+    "rendererVersion": 1,
+    "capabilities": []
   }
 }
-
-###
-
-POST {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/actions/SET_PRIORITY
-Content-Type: application/json
-Accept: application/json
-
-{
-  "row": {
-    "apiId": "task-guid-2001"
-  },
-  "inputs": {
-    "priority": 2
-  },
-  "context": {
-    "loginUserId": "demo"
-  }
-}
-
-###
-
-GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/CSPL_TASK_STATUS/attachments?sourceType=GN25&documentGuid=task-guid-2001
-Accept: application/json
-
-###
