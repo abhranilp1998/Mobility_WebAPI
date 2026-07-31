@@ -7,25 +7,6 @@ namespace Mobility.DynamicDashboard.Api.Services;
 public sealed class DynamicDashboardService(IDashboardRepository repository)
     : IDynamicDashboardService
 {
-    private static readonly HashSet<string> CurrentOppFilters =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "customer",
-            "salesPerson",
-            "agent",
-            "search"
-        };
-
-    private static readonly HashSet<string> CurrentOppSortFields =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "customerName",
-            "stageLabel",
-            "followUpDate",
-            "salesPersonName",
-            "agentName"
-        };
-
     public async Task<DashboardServiceResult<DashboardDefinitionResponse>>
         GetDefinitionAsync(
             string screenId,
@@ -100,12 +81,22 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
         DashboardRowsRequest request,
         CancellationToken cancellationToken)
     {
-        var versionFailure = ValidateDefinitionVersion<DashboardRowsResponse>(
-            dashboardCode,
-            definitionVersion);
-        if (versionFailure is not null)
+        var definition = await repository.GetDefinitionAsync(
+            dashboardCode.Trim(),
+            cancellationToken);
+        if (definition is null)
         {
-            return versionFailure;
+            return NotFound<DashboardRowsResponse>(
+                "dashboard_not_found",
+                "No handler is registered for this dashboard.");
+        }
+
+        if (!definitionVersion.Equals(
+                definition.DefinitionVersion,
+                StringComparison.Ordinal))
+        {
+            return DefinitionChanged<DashboardRowsResponse>(
+                definition.DefinitionVersion);
         }
 
         var callerFailure = ValidateCaller<DashboardRowsResponse>(
@@ -116,8 +107,11 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             return callerFailure;
         }
 
+        var declaredFilters = definition.Definition.Filters
+            .Select(filter => filter.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var unknownFilters = request.Filters.Keys
-            .Where(key => !CurrentOppFilters.Contains(key))
+            .Where(key => !declaredFilters.Contains(key))
             .ToArray();
         if (unknownFilters.Length > 0)
         {
@@ -140,7 +134,8 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
         }
 
         var invalidSortFields = request.Sort
-            .Where(sort => !CurrentOppSortFields.Contains(sort.Field))
+            .Where(sort => !repository.GetSortFields(definition.DashboardCode)
+                .Contains(sort.Field))
             .Select(sort => sort.Field)
             .ToArray();
         if (invalidSortFields.Length > 0)
@@ -150,17 +145,28 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                 $"Unsupported sort fields: {string.Join(", ", invalidSortFields)}.");
         }
 
-        var filteredRows = await repository.QueryRowsAsync(
-            dashboardCode.Trim(),
-            request,
-            cancellationToken);
-        if (filteredRows is null)
+        DashboardRowsQueryResult? queryResult;
+        try
+        {
+            queryResult = await repository.QueryRowsAsync(
+                dashboardCode.Trim(),
+                callerId,
+                request,
+                cancellationToken);
+        }
+        catch (DashboardDataSourceException failure)
+        {
+            return FromSourceFailure<DashboardRowsResponse>(failure);
+        }
+
+        if (queryResult is null)
         {
             return NotFound<DashboardRowsResponse>(
                 "dashboard_not_found",
                 "No row handler is registered for this dashboard.");
         }
 
+        var filteredRows = queryResult.Rows;
         var totalCount = filteredRows.Count;
         var offset = ((long)request.Page.Number - 1) * request.Page.Size;
         var pageRows = offset >= filteredRows.Count
@@ -172,9 +178,9 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
 
         return DashboardServiceResult<DashboardRowsResponse>.Success(
             new DashboardRowsResponse(
-                InMemoryDashboardRepository.CurrentOppCode,
-                InMemoryDashboardRepository.DefinitionVersion,
-                "current-opp-memory-r1",
+                definition.DashboardCode,
+                definition.DefinitionVersion,
+                queryResult.DataRevision,
                 totalCount,
                 pageRows.Count,
                 pageRows,
@@ -189,17 +195,27 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             string dashboardCode,
             string filterKey,
             string definitionVersion,
+            string callerId,
             string? search,
             string? cursor,
             CancellationToken cancellationToken)
     {
-        var versionFailure =
-            ValidateDefinitionVersion<DashboardFilterOptionsResponse>(
-                dashboardCode,
-                definitionVersion);
-        if (versionFailure is not null)
+        var definition = await repository.GetDefinitionAsync(
+            dashboardCode.Trim(),
+            cancellationToken);
+        if (definition is null)
         {
-            return versionFailure;
+            return NotFound<DashboardFilterOptionsResponse>(
+                "dashboard_not_found",
+                "No handler is registered for this dashboard.");
+        }
+
+        if (!definitionVersion.Equals(
+                definition.DefinitionVersion,
+                StringComparison.Ordinal))
+        {
+            return DefinitionChanged<DashboardFilterOptionsResponse>(
+                definition.DefinitionVersion);
         }
 
         if (search?.Length > 100)
@@ -216,12 +232,21 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                 "The in-memory POC has one option page and does not issue cursors.");
         }
 
-        var response = await repository.GetFilterOptionsAsync(
-            dashboardCode.Trim(),
-            filterKey.Trim(),
-            search?.Trim(),
-            cursor,
-            cancellationToken);
+        DashboardFilterOptionsResponse? response;
+        try
+        {
+            response = await repository.GetFilterOptionsAsync(
+                dashboardCode.Trim(),
+                filterKey.Trim(),
+                callerId,
+                search?.Trim(),
+                cursor,
+                cancellationToken);
+        }
+        catch (DashboardDataSourceException failure)
+        {
+            return FromSourceFailure<DashboardFilterOptionsResponse>(failure);
+        }
 
         return response is null
             ? NotFound<DashboardFilterOptionsResponse>(
@@ -259,12 +284,33 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                 registration.DefinitionVersion);
         }
 
+        var definition = await repository.GetDefinitionAsync(
+            registration.DashboardCode,
+            cancellationToken);
+        var actionDefinition = definition?.Definition.Actions.SingleOrDefault(
+            item => item.ActionCode.Equals(
+                registration.ActionCode,
+                StringComparison.OrdinalIgnoreCase));
+
         var callerFailure = ValidateCaller<DashboardActionResponse>(
             callerId,
             request.Context);
         if (callerFailure is not null)
         {
             return callerFailure;
+        }
+
+        var missingInputs = actionDefinition?.Inputs?
+            .Where(input => input.Required &&
+                (!request.Inputs.TryGetValue(input.Key, out var value) ||
+                 value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined))
+            .Select(input => input.Key)
+            .ToArray() ?? [];
+        if (missingInputs.Length > 0)
+        {
+            return BadRequest<DashboardActionResponse>(
+                "invalid_action_input",
+                $"Required action inputs are missing: {string.Join(", ", missingInputs)}.");
         }
 
         if (registration.IsMutation &&
@@ -276,10 +322,20 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                 "A 16 to 100 character Idempotency-Key is required for mutating actions.");
         }
 
-        var row = await repository.FindRowAsync(
-            registration.DashboardCode,
-            request.RowKey.Trim(),
-            cancellationToken);
+        NormalizedDashboardRow? row;
+        try
+        {
+            row = await repository.FindRowAsync(
+                registration.DashboardCode,
+                request.RowKey.Trim(),
+                callerId,
+                request.Context,
+                cancellationToken);
+        }
+        catch (DashboardDataSourceException failure)
+        {
+            return FromSourceFailure<DashboardActionResponse>(failure);
+        }
         if (row is null)
         {
             return NotFound<DashboardActionResponse>(
@@ -364,11 +420,19 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                 "documentGuid cannot exceed 100 characters.");
         }
 
-        var response = await repository.GetAttachmentsAsync(
-            dashboardCode.Trim(),
-            sourceType,
-            documentGuid.Trim(),
-            cancellationToken);
+        DashboardAttachmentsResponse? response;
+        try
+        {
+            response = await repository.GetAttachmentsAsync(
+                dashboardCode.Trim(),
+                sourceType,
+                documentGuid.Trim(),
+                cancellationToken);
+        }
+        catch (DashboardDataSourceException failure)
+        {
+            return FromSourceFailure<DashboardAttachmentsResponse>(failure);
+        }
 
         return response is null
             ? NotFound<DashboardAttachmentsResponse>(
@@ -413,6 +477,22 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                     {
                         ["rowKey"] = row.RowKey
                     })),
+            "VIEW_WORK_LOG" => new DashboardActionResponse(
+                true,
+                "Open the registered work-log route.",
+                row.RowVersion,
+                new DashboardClientEffect(
+                    DashboardClientEffectType.ClientNavigation,
+                    NavigationCode: "VIEW_WORK_LOG",
+                    Arguments: new()
+                    {
+                        ["rowKey"] = row.RowKey,
+                        ["workLogGuid"] = row.Values.TryGetValue(
+                            "workLogGuid",
+                            out var workLogGuid)
+                            ? workLogGuid
+                            : row.RowKey
+                    })),
             "SET_WORKING_STATUS" when TryReadBoolean(
                 request.Inputs,
                 "isWorking",
@@ -428,12 +508,16 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                         })),
             "SET_PRIORITY" when TryReadPriority(
                 request.Inputs,
-                out _) => new DashboardActionResponse(
+                out var priority) => new DashboardActionResponse(
                     true,
                     "Mocked Task Status priority mutation accepted.",
                     row.RowVersion,
                     new DashboardClientEffect(
-                        DashboardClientEffectType.RefreshRow)),
+                        DashboardClientEffectType.LocalRowPatch,
+                        RowPatch: new()
+                        {
+                            ["priority"] = priority
+                        })),
             _ => null
         };
     }
@@ -466,27 +550,6 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
         return inputs.TryGetValue("priority", out var element) &&
             element.TryGetInt32(out priority) &&
             priority > 0;
-    }
-
-    private static DashboardServiceResult<T>? ValidateDefinitionVersion<T>(
-        string dashboardCode,
-        string definitionVersion)
-    {
-        if (!dashboardCode.Equals(
-                InMemoryDashboardRepository.CurrentOppCode,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return NotFound<T>(
-                "dashboard_not_found",
-                "No handler is registered for this dashboard.");
-        }
-
-        return definitionVersion.Equals(
-            InMemoryDashboardRepository.DefinitionVersion,
-            StringComparison.Ordinal)
-                ? null
-                : DefinitionChanged<T>(
-                    InMemoryDashboardRepository.DefinitionVersion);
     }
 
     private static DashboardServiceResult<T>? ValidateCaller<T>(
@@ -524,6 +587,14 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             code,
             "The requested dashboard resource was not found.",
             detail);
+
+    private static DashboardServiceResult<T> FromSourceFailure<T>(
+        DashboardDataSourceException failure) =>
+        DashboardServiceResult<T>.Failure(
+            failure.StatusCode,
+            failure.Code,
+            failure.Title,
+            failure.Message);
 
     private static DashboardServiceResult<T> DefinitionChanged<T>(
         string currentVersion) =>

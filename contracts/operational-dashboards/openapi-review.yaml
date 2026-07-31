@@ -688,6 +688,41 @@ components:
             - supplementaryFreshRequest
         openActionCode:
           type: string
+    DashboardActionInputDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - label
+        - controlType
+        - valueType
+        - required
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        controlType:
+          type: string
+          enum:
+            - toggle
+            - singleSelect
+            - text
+        valueType:
+          type: string
+          enum:
+            - boolean
+            - integer
+            - number
+            - string
+        required:
+          type: boolean
+        options:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
     DashboardActionDefinition:
       type: object
       additionalProperties: true
@@ -706,7 +741,7 @@ components:
           enum:
             - clientNavigation
             - clientDialog
-            - serverAction
+            - serverMutation
         navigationCode:
           type:
             - string
@@ -728,6 +763,18 @@ components:
             - localRowPatch
             - clientNavigation
             - refreshDashboardWhenChildReturnsTrue
+        argumentFields:
+          type:
+            - object
+            - 'null'
+          additionalProperties:
+            type: string
+        inputs:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/DashboardActionInputDefinition'
     DashboardSort:
       type: object
       additionalProperties: false

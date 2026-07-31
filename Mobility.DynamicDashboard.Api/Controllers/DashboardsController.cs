@@ -136,6 +136,7 @@ public sealed class DashboardsController(IDynamicDashboardService service)
             dashboardCode,
             filterKey,
             definitionVersion,
+            GetCallerId(),
             search,
             cursor,
             cancellationToken);

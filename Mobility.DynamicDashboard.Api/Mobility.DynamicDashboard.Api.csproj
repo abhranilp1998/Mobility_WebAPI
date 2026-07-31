@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Enables local user-secrets storage for database credentials without committing them. -->
+    <UserSecretsId>9f8f8e3f-3c37-4f5d-bb92-5c0d6ad91a67</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -47,7 +47,7 @@ builder.Services.AddOpenApi("v1", options =>
         document.Info.Title = "Mobility Operational Dashboard Renderer API";
         document.Info.Version = "1.0.0";
         document.Info.Description =
-            "Backend-driven operational dashboard contract. Current Opp All Followups is the only fully implemented POC.";
+            "Backend-driven operational dashboard contract with a configured Current Opp live/in-memory POC and three in-memory compatibility dashboards.";
 
         document.Components ??= new OpenApiComponents();
         document.Components.SecuritySchemes ??=
@@ -229,7 +229,16 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddScoped<IDynamicDashboardService, DynamicDashboardService>();
-builder.Services.AddSingleton<IDashboardRepository, InMemoryDashboardRepository>();
+builder.Services
+    .AddOptions<CurrentOppLiveOptions>()
+    .Bind(builder.Configuration.GetSection("DashboardApi:CurrentOpp"));
+builder.Services.AddHttpClient<LegacyCurrentOppSource>();
+builder.Services.AddSingleton<CurrentOppScopeResolver>();
+builder.Services.AddSingleton<ILegacyCurrentOppSource>(serviceProvider =>
+    serviceProvider.GetRequiredService<LegacyCurrentOppSource>());
+builder.Services.AddSingleton<CurrentOppLiveHandler>();
+builder.Services.AddSingleton<InMemoryDashboardRepository>();
+builder.Services.AddSingleton<IDashboardRepository, ConfiguredDashboardRepository>();
 
 var app = builder.Build();
 

@@ -1,6 +1,6 @@
 # Operational Dashboard Renderer Contract Review
 
-Status: **Current Opp in-memory POC implemented; production integrations pending**
+Status: **Four-dashboard in-memory POC implemented; production integrations pending**
 
 This package defines the ASP.NET Core Web API boundary for backend-driven
 operational dashboards. It does not approve or implement SQL execution,
@@ -9,8 +9,7 @@ production renderer.
 
 ## Rollout order
 
-1. `CSPL_CURRENT_OPP_ALL_FOLLOWUPS` — first POC and the only fully worked
-   example in this package.
+1. `CSPL_CURRENT_OPP_ALL_FOLLOWUPS`
 2. `CSPL_OPPORTUNITY_FOLLOW_UP`
 3. `CSPL_WORK_DONE`
 4. `CSPL_TASK_STATUS`
@@ -46,8 +45,8 @@ templates. Production data/action handlers remain outside this phase.
 - CR01/GN25 attachment identity remains `(sourceType, documentGuid)`.
 - Attachment enrichment is supplementary; its failure cannot fail the primary
   dashboard rows response.
-- Current Opp grouping, filters, card content, date tone, attachments, and
-  return-from-child refresh behavior remain intact.
+- All four POC dashboards publish grouping, filters, card content, date tone,
+  attachments, and registered actions through the same definition envelope.
 - Work Done filter definitions remain dynamic, but raw legacy `DataSource` and
   `FilterClause` values do not cross this API boundary.
 - Task Status preserves CR01/GN25 branching and only exposes actions allowed for

@@ -1,0 +1,208 @@
+using Microsoft.Extensions.Options;
+using Mobility.DynamicDashboard.Api.Models;
+using Mobility.DynamicDashboard.Api.Services;
+
+namespace Mobility.DynamicDashboard.Api.Data;
+
+/// <summary>
+/// Server-owned switch for the Current Opp POC. InMemory is intentionally an
+/// explicit development fallback; Live never falls through to demo rows.
+/// </summary>
+public sealed class CurrentOppLiveOptions
+{
+    public string Mode { get; set; } = "InMemory";
+
+    public CurrentOppLegacyOptions Legacy { get; set; } = new();
+
+    // The dictionary key is the authenticated caller ID. Development uses a
+    // temporary checked-in demo mapping; production should replace this with a
+    // resolver backed by the authentication system or a tenant table.
+    // The dictionary key is the authenticated caller ID. Development uses a
+    // temporary checked-in demo mapping; production should replace this with a
+    // resolver backed by the authentication system or a tenant table.
+    public Dictionary<string, CurrentOppTenantScopeOptions> Tenants { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class CurrentOppLegacyOptions
+{
+    public string BaseUrl { get; set; } = string.Empty;
+
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Names the server-side connection string passed to the approved legacy
+    /// source when a tenant does not provide an explicit authorized mapping.
+    /// Current Opp Development configuration intentionally uses anupalan.
+    /// </summary>
+    public string ConnectionStringName { get; set; } = "anupalan";
+}
+
+/// <summary>
+/// Maps an authenticated caller to one approved ERP customer and its allowed
+/// branch/financial-year scope. Legacy connection values belong here or in a
+/// secret-backed configuration provider, never in a request body.
+/// </summary>
+public sealed class CurrentOppTenantScopeOptions
+{
+    public string CustomerId { get; set; } = string.Empty;
+
+    public string LegacyConnection { get; set; } = string.Empty;
+
+    public string DefaultBranchId { get; set; } = string.Empty;
+
+    public string DefaultFinancialYearId { get; set; } = string.Empty;
+
+    public List<string> AllowedBranchIds { get; set; } = [];
+
+    public List<string> AllowedFinancialYearIds { get; set; } = [];
+}
+
+public sealed record CurrentOppScope(
+    string CallerId,
+    string CustomerId,
+    string BranchId,
+    string FinancialYearId,
+    Uri LegacyBaseUri,
+    string LegacyConnection);
+
+/// <summary>
+/// Resolves and validates all values needed by the legacy call. The request
+/// supplies the selected branch/year only as a candidate; the allow-lists and
+/// customer/connection mapping remain server-owned authorization data.
+/// </summary>
+public sealed class CurrentOppScopeResolver(
+    IOptions<CurrentOppLiveOptions> options,
+    IConfiguration configuration)
+{
+    public CurrentOppScope Resolve(
+        string callerId,
+        DashboardRequestContext? context,
+        bool useConfiguredDefaults)
+    {
+        var settings = options.Value;
+        var tenant = settings.Tenants.FirstOrDefault(item =>
+            item.Key.Equals(callerId.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Value;
+
+        if (tenant is null)
+        {
+            throw Failure(
+                StatusCodes.Status403Forbidden,
+                "live_scope_forbidden",
+                "The authenticated caller has no authorized Current Opp scope.");
+        }
+
+        var customerId = tenant.CustomerId.Trim();
+        var connection = string.IsNullOrWhiteSpace(tenant.LegacyConnection)
+            ? configuration.GetConnectionString(settings.Legacy.ConnectionStringName)?.Trim()
+            : tenant.LegacyConnection.Trim();
+        connection ??= string.Empty;
+        if (customerId.Length == 0 || connection.Length == 0)
+        {
+            throw Failure(
+                StatusCodes.Status503ServiceUnavailable,
+                "live_configuration_missing",
+                "The Current Opp live tenant mapping is incomplete.");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.Legacy.BaseUrl))
+        {
+            throw Failure(
+                StatusCodes.Status503ServiceUnavailable,
+                "live_configuration_missing",
+                "The Current Opp legacy service base URL is not configured.");
+        }
+
+        if (!Uri.TryCreate(settings.Legacy.BaseUrl.Trim(), UriKind.Absolute, out var baseUri) ||
+            baseUri.Scheme is not ("http" or "https"))
+        {
+            throw Failure(
+                StatusCodes.Status503ServiceUnavailable,
+                "live_configuration_invalid",
+                "The Current Opp legacy service base URL is invalid.");
+        }
+
+        var branchId = ResolveScopeValue(
+            context?.BranchId,
+            tenant.DefaultBranchId,
+            tenant.AllowedBranchIds,
+            "branchId",
+            useConfiguredDefaults);
+        var financialYearId = ResolveScopeValue(
+            context?.FinancialYearId,
+            tenant.DefaultFinancialYearId,
+            tenant.AllowedFinancialYearIds,
+            "financialYearId",
+            useConfiguredDefaults);
+
+        return new CurrentOppScope(
+            callerId.Trim(),
+            customerId,
+            branchId,
+            financialYearId,
+            baseUri,
+            connection);
+    }
+
+    private static string ResolveScopeValue(
+        string? requested,
+        string configuredDefault,
+        IReadOnlyList<string> allowedValues,
+        string fieldName,
+        bool useConfiguredDefaults)
+    {
+        var allowed = allowedValues
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var value = requested?.Trim() ?? string.Empty;
+        if (value.Length == 0 && useConfiguredDefaults)
+        {
+            value = configuredDefault.Trim();
+            if (value.Length == 0 && allowed.Count == 1)
+            {
+                value = allowed.Single();
+            }
+        }
+
+        if (value.Length == 0)
+        {
+            throw Failure(
+                StatusCodes.Status400BadRequest,
+                "live_scope_required",
+                $"An authorized {fieldName} is required for the live Current Opp source.");
+        }
+
+        if (allowed.Count == 0)
+        {
+            throw Failure(
+                StatusCodes.Status503ServiceUnavailable,
+                "live_configuration_missing",
+                $"The Current Opp tenant mapping has no authorized {fieldName} values.");
+        }
+
+        if (!allowed.Contains(value))
+        {
+            throw Failure(
+                StatusCodes.Status403Forbidden,
+                "live_scope_forbidden",
+                $"The authenticated caller is not authorized for the requested {fieldName}.");
+        }
+
+        return value;
+    }
+
+    private static DashboardDataSourceException Failure(
+        int statusCode,
+        string code,
+        string detail) =>
+        new(
+            statusCode,
+            code,
+            statusCode == StatusCodes.Status403Forbidden
+                ? "Dashboard scope is not authorized."
+                : "Current Opp live configuration is unavailable.",
+            detail);
+}

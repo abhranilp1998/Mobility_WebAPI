@@ -118,6 +118,11 @@ compiled handler.
 
 The client does not post an authoritative row object.
 
+Published action definitions may include an `inputs` array. Each input declares
+its key, label, primitive value type, supported control type, required flag, and
+optional choices. The renderer may construct the action form from this metadata
+without adding dashboard-specific controls to the client.
+
 ### `DashboardActionResponse`
 
 Contains `success`, `message`, optional `newRowVersion`, and a closed

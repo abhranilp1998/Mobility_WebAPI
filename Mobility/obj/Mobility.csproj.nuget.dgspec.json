@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/Users/coral/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj": {}
+    "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj": {}
   },
   "projects": {
-    "/Users/coral/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj": {
+    "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/coral/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj",
+        "projectUniqueName": "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj",
         "projectName": "Mobility",
-        "projectPath": "/Users/coral/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj",
-        "packagesPath": "/Users/coral/.nuget/packages/",
-        "outputPath": "/Users/coral/Documents/WebAPIs/Mobility/Mobility/obj/",
+        "projectPath": "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility/Mobility.csproj",
+        "packagesPath": "/Users/abhranilpaul/.nuget/packages/",
+        "outputPath": "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/Users/coral/.nuget/NuGet/NuGet.Config"
+          "/Users/abhranilpaul/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
@@ -24,7 +24,6 @@
         },
         "frameworks": {
           "net10.0": {
-            "framework": "net10.0",
             "targetAlias": "net10.0",
             "projectReferences": {}
           }
@@ -43,7 +42,6 @@
       },
       "frameworks": {
         "net10.0": {
-          "framework": "net10.0",
           "targetAlias": "net10.0",
           "dependencies": {
             "Microsoft.AspNetCore.OpenApi": {

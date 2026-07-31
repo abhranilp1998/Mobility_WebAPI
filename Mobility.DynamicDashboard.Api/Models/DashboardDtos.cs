@@ -170,7 +170,22 @@ public sealed record DashboardActionDefinition(
     string? NavigationCode = null,
     string? Trigger = null,
     string? Placement = null,
-    Dictionary<string, string>? ArgumentFields = null);
+    Dictionary<string, string>? ArgumentFields = null,
+    IReadOnlyList<DashboardActionInputDefinition>? Inputs = null);
+
+/// <summary>
+/// Describes an action input that the shared client renderer can construct
+/// without knowing a dashboard-specific action code. The API owns the input
+/// label, control type, value type, and optional choices; the client only
+/// supplies values from the rendered form.
+/// </summary>
+public sealed record DashboardActionInputDefinition(
+    string Key,
+    string Label,
+    string ControlType,
+    string ValueType,
+    bool Required,
+    IReadOnlyList<string>? Options = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class DashboardSort
@@ -222,6 +237,15 @@ public sealed record DashboardRowsResponse(
     int ReturnedCount,
     IReadOnlyList<NormalizedDashboardRow> Rows,
     PageResponse Page);
+
+/// <summary>
+/// Internal repository result. The public response keeps the opaque
+/// <c>dataRevision</c> beside the rows, while each source supplies a revision
+/// for the exact authorized scope that it queried.
+/// </summary>
+public sealed record DashboardRowsQueryResult(
+    IReadOnlyList<NormalizedDashboardRow> Rows,
+    string DataRevision);
 
 public sealed record NormalizedDashboardRow(
     string RowKey,

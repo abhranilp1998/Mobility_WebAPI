@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 3,
   "targets": {
     "net10.0": {
       "Dapper/2.1.79": {
@@ -465,19 +465,19 @@
     ]
   },
   "packageFolders": {
-    "/Users/coral/.nuget/packages/": {}
+    "/Users/abhranilpaul/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/Users/coral/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj",
+      "projectUniqueName": "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj",
       "projectName": "Mobility.DynamicDashboard.Api",
-      "projectPath": "/Users/coral/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj",
-      "packagesPath": "/Users/coral/.nuget/packages/",
-      "outputPath": "/Users/coral/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/obj/",
+      "projectPath": "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj",
+      "packagesPath": "/Users/abhranilpaul/.nuget/packages/",
+      "outputPath": "/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "/Users/coral/.nuget/NuGet/NuGet.Config"
+        "/Users/abhranilpaul/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net10.0"
@@ -487,7 +487,6 @@
       },
       "frameworks": {
         "net10.0": {
-          "framework": "net10.0",
           "targetAlias": "net10.0",
           "projectReferences": {}
         }
@@ -506,7 +505,6 @@
     },
     "frameworks": {
       "net10.0": {
-        "framework": "net10.0",
         "targetAlias": "net10.0",
         "dependencies": {
           "Dapper": {

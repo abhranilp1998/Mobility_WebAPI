@@ -14,22 +14,28 @@ public interface IDashboardRepository
         string screenId,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<NormalizedDashboardRow>?> QueryRowsAsync(
+    Task<DashboardRowsQueryResult?> QueryRowsAsync(
         string dashboardCode,
+        string callerId,
         DashboardRowsRequest request,
         CancellationToken cancellationToken);
 
     Task<NormalizedDashboardRow?> FindRowAsync(
         string dashboardCode,
         string rowKey,
+        string callerId,
+        DashboardRequestContext context,
         CancellationToken cancellationToken);
 
     Task<DashboardFilterOptionsResponse?> GetFilterOptionsAsync(
         string dashboardCode,
         string filterKey,
+        string callerId,
         string? search,
         string? cursor,
         CancellationToken cancellationToken);
+
+    IReadOnlySet<string> GetSortFields(string dashboardCode);
 
     Task<DashboardAttachmentsResponse?> GetAttachmentsAsync(
         string dashboardCode,

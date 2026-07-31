@@ -23,6 +23,7 @@ public interface IDynamicDashboardService
             string dashboardCode,
             string filterKey,
             string definitionVersion,
+            string callerId,
             string? search,
             string? cursor,
             CancellationToken cancellationToken);

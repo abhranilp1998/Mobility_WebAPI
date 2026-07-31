@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("9f8f8e3f-3c37-4f5d-bb92-5c0d6ad91a67")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("Mobility.DynamicDashboard.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f7edf4a597946664c3011a0abf84ec0100664ee1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+79dcf66506794da6c0a1e4e22fe3aa31e2e5675f")]
 [assembly: System.Reflection.AssemblyProductAttribute("Mobility.DynamicDashboard.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Mobility.DynamicDashboard.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
