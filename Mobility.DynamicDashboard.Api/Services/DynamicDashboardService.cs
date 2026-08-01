@@ -379,6 +379,42 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             }
         }
 
+        if (repository.IsTaskStatusLive(registration.DashboardCode))
+        {
+            DashboardActionResponse? liveResponse;
+            try
+            {
+                liveResponse = await repository.ExecuteTaskStatusLiveActionAsync(
+                    registration.DashboardCode,
+                    registration.ActionCode,
+                    callerId,
+                    row,
+                    request,
+                    cancellationToken);
+            }
+            catch (DashboardDataSourceException failure)
+            {
+                return FromSourceFailure<DashboardActionResponse>(failure);
+            }
+
+            if (liveResponse is null)
+            {
+                return DashboardServiceResult<DashboardActionResponse>.Failure(
+                    StatusCodes.Status501NotImplemented,
+                    "task_status_live_action_not_implemented",
+                    "The live Task Status action is not configured.",
+                    "The server did not register an approved live action handler.");
+            }
+
+            if (replayKey is not null)
+            {
+                repository.StoreIdempotentActionResponse(replayKey, liveResponse);
+            }
+
+            return DashboardServiceResult<DashboardActionResponse>.Success(
+                liveResponse);
+        }
+
         var actionResponse = BuildActionResponse(
             registration.ActionCode,
             row,
@@ -404,6 +440,7 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             string dashboardCode,
             AttachmentSourceType sourceType,
             string documentGuid,
+            string callerId,
             CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(documentGuid))
@@ -427,6 +464,7 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                 dashboardCode.Trim(),
                 sourceType,
                 documentGuid.Trim(),
+                callerId,
                 cancellationToken);
         }
         catch (DashboardDataSourceException failure)
@@ -594,7 +632,8 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             failure.StatusCode,
             failure.Code,
             failure.Title,
-            failure.Message);
+            failure.Message,
+            retryable: failure.Retryable);
 
     private static DashboardServiceResult<T> DefinitionChanged<T>(
         string currentVersion) =>

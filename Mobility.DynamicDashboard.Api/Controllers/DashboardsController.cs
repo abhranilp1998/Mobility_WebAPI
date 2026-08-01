@@ -213,6 +213,7 @@ public sealed class DashboardsController(IDynamicDashboardService service)
             dashboardCode,
             sourceType!.Value,
             documentGuid,
+            GetCallerId(),
             cancellationToken);
 
         return result.IsSuccess

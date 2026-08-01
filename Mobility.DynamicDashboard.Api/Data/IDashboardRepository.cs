@@ -41,6 +41,17 @@ public interface IDashboardRepository
         string dashboardCode,
         AttachmentSourceType sourceType,
         string documentGuid,
+        string callerId,
+        CancellationToken cancellationToken);
+
+    bool IsTaskStatusLive(string dashboardCode);
+
+    Task<DashboardActionResponse?> ExecuteTaskStatusLiveActionAsync(
+        string dashboardCode,
+        string actionCode,
+        string callerId,
+        NormalizedDashboardRow row,
+        DashboardActionRequest request,
         CancellationToken cancellationToken);
 
     DashboardActionRegistration? GetActionRegistration(

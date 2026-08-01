@@ -42,5 +42,6 @@ public interface IDynamicDashboardService
             string dashboardCode,
             AttachmentSourceType sourceType,
             string documentGuid,
+            string callerId,
             CancellationToken cancellationToken);
 }

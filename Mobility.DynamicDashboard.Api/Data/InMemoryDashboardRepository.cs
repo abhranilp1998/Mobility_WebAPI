@@ -120,6 +120,8 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
                 new(TaskStatusCode, DefinitionVersion, "VIEW_TASK_HISTORY", false),
             [(TaskStatusCode, "OPEN_ATTACHMENTS")] =
                 new(TaskStatusCode, DefinitionVersion, "OPEN_ATTACHMENTS", false),
+            [(TaskStatusCode, "TOGGLE_HOT_STATUS")] =
+                new(TaskStatusCode, DefinitionVersion, "TOGGLE_HOT_STATUS", true),
             [(WorkDoneCode, "VIEW_WORK_LOG")] =
                 new(WorkDoneCode, DefinitionVersion, "VIEW_WORK_LOG", false),
             [(WorkDoneCode, "OPEN_ATTACHMENTS")] =
@@ -275,6 +277,7 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
         string dashboardCode,
         AttachmentSourceType sourceType,
         string documentGuid,
+        string callerId,
         CancellationToken cancellationToken)
     {
         var normalizedDashboard = dashboardCode.ToUpperInvariant();
@@ -306,6 +309,17 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
                 attachments.Count,
                 attachments));
     }
+
+    public bool IsTaskStatusLive(string dashboardCode) => false;
+
+    public Task<DashboardActionResponse?> ExecuteTaskStatusLiveActionAsync(
+        string dashboardCode,
+        string actionCode,
+        string callerId,
+        NormalizedDashboardRow row,
+        DashboardActionRequest request,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<DashboardActionResponse?>(null);
 
     public DashboardActionRegistration? GetActionRegistration(
         string dashboardCode,
@@ -519,6 +533,13 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
                         "clientDialog",
                         "none",
                         Trigger: "tap",
+                        Placement: "cardFooter"),
+                    new DashboardActionDefinition(
+                        "TOGGLE_HOT_STATUS",
+                        "Toggle hot status",
+                        "serverMutation",
+                        "refreshDashboard",
+                        Trigger: "tap",
                         Placement: "cardFooter")
                 ]));
     }
@@ -595,7 +616,8 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
                 TaskStatusScreenId,
                 "Use the existing dashboard when the renderer is incompatible or the POC is disabled."),
             new DashboardDefinition(
-                "groupedCardList",
+                // "groupedCardList",
+                "null",
                 "taskGuid",
                 [
                     new(
@@ -651,6 +673,7 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
                 ],
                 new DashboardGrouping(
                     "stageName",
+                    // "developer",
                     "Stage",
                     "Unassigned Stage",
                     "alphaAsc",
@@ -750,7 +773,7 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
                     "attachmentDocumentGuid",
                     "supplementaryFreshRequest",
                     "OPEN_ATTACHMENTS",
-                    SourceType: "GN25",
+                    SourceTypeField: "datasource",
                     DeclaredCountField: "attachmentCount"),
                 [
                     new DashboardActionDefinition(

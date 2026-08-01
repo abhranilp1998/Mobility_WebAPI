@@ -6,18 +6,31 @@ namespace Mobility.DynamicDashboard.Api.Data;
 
 /// <summary>
 /// Selects the source for each dashboard without changing the public contract.
-/// Current Opp is the only live handler in this POC. The other dashboards and
-/// the explicit InMemory mode continue using the reviewed demo repository.
+/// Current Opp, Task Status, and Work Done can use live handlers. The other
+/// dashboards and explicit InMemory modes continue using the reviewed demo
+/// repository.
 /// Live mode deliberately has no fallback branch: a missing or unreachable
 /// legacy source becomes a diagnostic API error instead of demo data.
 /// </summary>
 public sealed class ConfiguredDashboardRepository(
     InMemoryDashboardRepository inMemory,
     CurrentOppLiveHandler currentOppLive,
-    IOptions<CurrentOppLiveOptions> options)
+    TaskStatusLiveHandler taskStatusLive,
+    WorkDoneLiveHandler workDoneLive,
+    IOptions<CurrentOppLiveOptions> currentOppOptions,
+    IOptions<TaskStatusLiveOptions> taskStatusOptions,
+    IOptions<WorkDoneLiveOptions> workDoneOptions)
     : IDashboardRepository
 {
-    private bool IsLive => options.Value.Mode.Equals(
+    private bool CurrentOppIsLive => currentOppOptions.Value.Mode.Equals(
+        "Live",
+        StringComparison.OrdinalIgnoreCase);
+
+    private bool TaskStatusIsLive => taskStatusOptions.Value.Mode.Equals(
+        "Live",
+        StringComparison.OrdinalIgnoreCase);
+
+    private bool WorkDoneIsLive => workDoneOptions.Value.Mode.Equals(
         "Live",
         StringComparison.OrdinalIgnoreCase);
 
@@ -25,6 +38,19 @@ public sealed class ConfiguredDashboardRepository(
         dashboardCode.Equals(
             InMemoryDashboardRepository.CurrentOppCode,
             StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTaskStatus(string dashboardCode) =>
+        dashboardCode.Equals(
+            InMemoryDashboardRepository.TaskStatusCode,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWorkDone(string dashboardCode) =>
+        dashboardCode.Equals(
+            InMemoryDashboardRepository.WorkDoneCode,
+            StringComparison.OrdinalIgnoreCase);
+
+    public bool IsTaskStatusLive(string dashboardCode) =>
+        IsTaskStatus(dashboardCode) && TaskStatusIsLive;
 
     public Task<DashboardDefinitionResponse?> GetDefinitionAsync(
         string screenId,
@@ -37,9 +63,25 @@ public sealed class ConfiguredDashboardRepository(
         DashboardRowsRequest request,
         CancellationToken cancellationToken)
     {
-        if (IsCurrentOpp(dashboardCode) && IsLive)
+        if (IsCurrentOpp(dashboardCode) && CurrentOppIsLive)
         {
             return await currentOppLive.QueryRowsAsync(
+                callerId,
+                request,
+                cancellationToken);
+        }
+
+        if (IsTaskStatus(dashboardCode) && TaskStatusIsLive)
+        {
+            return await taskStatusLive.QueryRowsAsync(
+                callerId,
+                request,
+                cancellationToken);
+        }
+
+        if (IsWorkDone(dashboardCode) && WorkDoneIsLive)
+        {
+            return await workDoneLive.QueryRowsAsync(
                 callerId,
                 request,
                 cancellationToken);
@@ -59,9 +101,27 @@ public sealed class ConfiguredDashboardRepository(
         DashboardRequestContext context,
         CancellationToken cancellationToken)
     {
-        if (IsCurrentOpp(dashboardCode) && IsLive)
+        if (IsCurrentOpp(dashboardCode) && CurrentOppIsLive)
         {
             return currentOppLive.FindRowAsync(
+                callerId,
+                rowKey,
+                context,
+                cancellationToken);
+        }
+
+        if (IsTaskStatus(dashboardCode) && TaskStatusIsLive)
+        {
+            return taskStatusLive.FindRowAsync(
+                callerId,
+                rowKey,
+                context,
+                cancellationToken);
+        }
+
+        if (IsWorkDone(dashboardCode) && WorkDoneIsLive)
+        {
+            return workDoneLive.FindRowAsync(
                 callerId,
                 rowKey,
                 context,
@@ -76,7 +136,7 @@ public sealed class ConfiguredDashboardRepository(
             cancellationToken);
     }
 
-    public Task<DashboardFilterOptionsResponse?> GetFilterOptionsAsync(
+    public async Task<DashboardFilterOptionsResponse?> GetFilterOptionsAsync(
         string dashboardCode,
         string filterKey,
         string callerId,
@@ -84,7 +144,7 @@ public sealed class ConfiguredDashboardRepository(
         string? cursor,
         CancellationToken cancellationToken)
     {
-        if (IsCurrentOpp(dashboardCode) && IsLive)
+        if (IsCurrentOpp(dashboardCode) && CurrentOppIsLive)
         {
             if (!string.IsNullOrWhiteSpace(cursor))
             {
@@ -95,14 +155,50 @@ public sealed class ConfiguredDashboardRepository(
                     "Remove cursor and request the authorized option set again.");
             }
 
-            return currentOppLive.GetFilterOptionsAsync(
+            return await currentOppLive.GetFilterOptionsAsync(
                 callerId,
                 filterKey,
                 search,
-                cancellationToken)!;
+                cancellationToken);
         }
 
-        return inMemory.GetFilterOptionsAsync(
+        if (IsTaskStatus(dashboardCode) && TaskStatusIsLive)
+        {
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                throw new DashboardDataSourceException(
+                    StatusCodes.Status400BadRequest,
+                    "invalid_cursor",
+                    "The live Task Status option source does not issue cursors.",
+                    "Remove cursor and request the authorized option set again.");
+            }
+
+            return await taskStatusLive.GetFilterOptionsAsync(
+                callerId,
+                filterKey,
+                search,
+                cancellationToken);
+        }
+
+        if (IsWorkDone(dashboardCode) && WorkDoneIsLive)
+        {
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                throw new DashboardDataSourceException(
+                    StatusCodes.Status400BadRequest,
+                    "invalid_cursor",
+                    "The live Work Done option source does not issue cursors.",
+                    "Remove cursor and request the authorized option set again.");
+            }
+
+            return await workDoneLive.GetFilterOptionsAsync(
+                callerId,
+                filterKey,
+                search,
+                cancellationToken);
+        }
+
+        return await inMemory.GetFilterOptionsAsync(
             dashboardCode,
             filterKey,
             callerId,
@@ -112,17 +208,22 @@ public sealed class ConfiguredDashboardRepository(
     }
 
     public IReadOnlySet<string> GetSortFields(string dashboardCode) =>
-        IsCurrentOpp(dashboardCode) && IsLive
+        IsCurrentOpp(dashboardCode) && CurrentOppIsLive
             ? currentOppLive.GetSortFields()
-            : inMemory.GetSortFields(dashboardCode);
+            : IsTaskStatus(dashboardCode) && TaskStatusIsLive
+                ? taskStatusLive.GetSortFields()
+                : IsWorkDone(dashboardCode) && WorkDoneIsLive
+                    ? workDoneLive.GetSortFields()
+                : inMemory.GetSortFields(dashboardCode);
 
-    public Task<DashboardAttachmentsResponse?> GetAttachmentsAsync(
+    public async Task<DashboardAttachmentsResponse?> GetAttachmentsAsync(
         string dashboardCode,
         AttachmentSourceType sourceType,
         string documentGuid,
+        string callerId,
         CancellationToken cancellationToken)
     {
-        if (IsCurrentOpp(dashboardCode) && IsLive)
+        if (IsCurrentOpp(dashboardCode) && CurrentOppIsLive)
         {
             throw new DashboardDataSourceException(
                 StatusCodes.Status501NotImplemented,
@@ -131,10 +232,50 @@ public sealed class ConfiguredDashboardRepository(
                 "The read-only live POC currently returns attachment references on rows; use the legacy attachment summary path until its server adapter is enabled.");
         }
 
-        return inMemory.GetAttachmentsAsync(
+        if (IsTaskStatus(dashboardCode) && TaskStatusIsLive)
+        {
+            return await taskStatusLive.GetAttachmentsAsync(
+                callerId,
+                sourceType,
+                documentGuid,
+                cancellationToken);
+        }
+
+        if (IsWorkDone(dashboardCode) && WorkDoneIsLive)
+        {
+            return await workDoneLive.GetAttachmentsAsync(
+                callerId,
+                sourceType,
+                documentGuid,
+                cancellationToken);
+        }
+
+        return await inMemory.GetAttachmentsAsync(
             dashboardCode,
             sourceType,
             documentGuid,
+            callerId,
+            cancellationToken);
+    }
+
+    public async Task<DashboardActionResponse?> ExecuteTaskStatusLiveActionAsync(
+        string dashboardCode,
+        string actionCode,
+        string callerId,
+        NormalizedDashboardRow row,
+        DashboardActionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!IsTaskStatus(dashboardCode) || !TaskStatusIsLive)
+        {
+            return null;
+        }
+
+        return await taskStatusLive.ExecuteActionAsync(
+            callerId,
+            actionCode,
+            row,
+            request,
             cancellationToken);
     }
 

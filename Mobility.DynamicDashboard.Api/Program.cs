@@ -47,7 +47,7 @@ builder.Services.AddOpenApi("v1", options =>
         document.Info.Title = "Mobility Operational Dashboard Renderer API";
         document.Info.Version = "1.0.0";
         document.Info.Description =
-            "Backend-driven operational dashboard contract with a configured Current Opp live/in-memory POC and three in-memory compatibility dashboards.";
+            "Backend-driven operational dashboard contract with configured Current Opp and Task Status live adapters plus in-memory compatibility dashboards.";
 
         document.Components ??= new OpenApiComponents();
         document.Components.SecuritySchemes ??=
@@ -237,6 +237,22 @@ builder.Services.AddSingleton<CurrentOppScopeResolver>();
 builder.Services.AddSingleton<ILegacyCurrentOppSource>(serviceProvider =>
     serviceProvider.GetRequiredService<LegacyCurrentOppSource>());
 builder.Services.AddSingleton<CurrentOppLiveHandler>();
+builder.Services
+    .AddOptions<TaskStatusLiveOptions>()
+    .Bind(builder.Configuration.GetSection("DashboardApi:TaskStatus"));
+builder.Services.AddHttpClient<LegacyTaskStatusSource>();
+builder.Services.AddSingleton<TaskStatusScopeResolver>();
+builder.Services.AddSingleton<ILegacyTaskStatusSource>(serviceProvider =>
+    serviceProvider.GetRequiredService<LegacyTaskStatusSource>());
+builder.Services.AddSingleton<TaskStatusLiveHandler>();
+builder.Services
+    .AddOptions<WorkDoneLiveOptions>()
+    .Bind(builder.Configuration.GetSection("DashboardApi:WorkDone"));
+builder.Services.AddHttpClient<LegacyWorkDoneSource>();
+builder.Services.AddSingleton<WorkDoneScopeResolver>();
+builder.Services.AddSingleton<ILegacyWorkDoneSource>(serviceProvider =>
+    serviceProvider.GetRequiredService<LegacyWorkDoneSource>());
+builder.Services.AddSingleton<WorkDoneLiveHandler>();
 builder.Services.AddSingleton<InMemoryDashboardRepository>();
 builder.Services.AddSingleton<IDashboardRepository, ConfiguredDashboardRepository>();
 

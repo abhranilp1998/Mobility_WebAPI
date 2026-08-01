@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Mobility.DynamicDashboard.Api.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+79dcf66506794da6c0a1e4e22fe3aa31e2e5675f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1c9c932dd266cc8a4be4a7b74ca11cba8dbc449b")]
 [assembly: System.Reflection.AssemblyProductAttribute("Mobility.DynamicDashboard.Api.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Mobility.DynamicDashboard.Api.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
