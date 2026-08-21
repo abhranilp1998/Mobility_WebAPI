@@ -19,6 +19,32 @@ public sealed class DashboardsController(IDynamicDashboardService service)
     private const string FilterKeyPattern = "^[A-Za-z][A-Za-z0-9_]{0,99}$";
     private const string DefinitionVersionPattern = "^[0-9]+\\.[0-9]+\\.[0-9]+$";
 
+    /// <summary>Lists definitions allowed for the current login tenant.</summary>
+    [HttpGet("catalog", Name = "getDashboardCatalog")]
+    [ProducesResponseType<DashboardCatalogResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<DashboardProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<DashboardCatalogResponse>> GetCatalog(
+        [FromQuery, Required]
+        ClientPlatform? platform,
+        [FromQuery, Range(1, int.MaxValue)]
+        int rendererVersion,
+        [FromQuery(Name = "capability")]
+        string[]? capabilities,
+        CancellationToken cancellationToken)
+    {
+        var result = await service.GetCatalogAsync(
+            GetTenantId(),
+            platform,
+            rendererVersion,
+            capabilities ?? [],
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : DashboardProblemFactory.ToActionResult(HttpContext, result);
+    }
+
     /// <summary>Gets a compatible published dashboard definition.</summary>
     /// <remarks>
     /// The capability query parameter is repeated for every compiled renderer
@@ -45,6 +71,7 @@ public sealed class DashboardsController(IDynamicDashboardService service)
     {
         var result = await service.GetDefinitionAsync(
             screenId,
+            GetTenantId(),
             platform,
             rendererVersion,
             capabilities ?? [],
@@ -92,7 +119,7 @@ public sealed class DashboardsController(IDynamicDashboardService service)
         var result = await service.GetRowsAsync(
             dashboardCode,
             definitionVersion,
-            GetCallerId(),
+            GetTenantId(),
             request,
             cancellationToken);
 
@@ -136,7 +163,7 @@ public sealed class DashboardsController(IDynamicDashboardService service)
             dashboardCode,
             filterKey,
             definitionVersion,
-            GetCallerId(),
+            GetTenantId(),
             search,
             cursor,
             cancellationToken);
@@ -180,7 +207,7 @@ public sealed class DashboardsController(IDynamicDashboardService service)
             actionCode,
             definitionVersion,
             idempotencyKey,
-            GetCallerId(),
+            GetTenantId(),
             request,
             cancellationToken);
 
@@ -213,7 +240,7 @@ public sealed class DashboardsController(IDynamicDashboardService service)
             dashboardCode,
             sourceType!.Value,
             documentGuid,
-            GetCallerId(),
+            GetTenantId(),
             cancellationToken);
 
         return result.IsSuccess
@@ -221,11 +248,11 @@ public sealed class DashboardsController(IDynamicDashboardService service)
             : DashboardProblemFactory.ToActionResult(HttpContext, result);
     }
 
-    private string GetCallerId()
+    private string GetTenantId()
     {
         return User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? throw new InvalidOperationException(
-                "The authorized dashboard caller has no subject identifier.");
+                "The authorized dashboard tenant has no subject identifier.");
     }
 
     private static bool MatchesEtag(

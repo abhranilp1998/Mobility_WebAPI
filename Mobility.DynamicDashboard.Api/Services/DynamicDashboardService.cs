@@ -4,12 +4,82 @@ using Mobility.DynamicDashboard.Api.Models;
 
 namespace Mobility.DynamicDashboard.Api.Services;
 
-public sealed class DynamicDashboardService(IDashboardRepository repository)
+public sealed class DynamicDashboardService(
+    IDashboardRepository repository,
+    IDashboardTenantAccessService tenantAccess)
     : IDynamicDashboardService
 {
+    public async Task<DashboardServiceResult<DashboardCatalogResponse>>
+        GetCatalogAsync(
+            string tenantId,
+            ClientPlatform? platform,
+            int rendererVersion,
+            IReadOnlyList<string> capabilities,
+            CancellationToken cancellationToken)
+    {
+        if (platform is null)
+        {
+            return BadRequest<DashboardCatalogResponse>(
+                "invalid_platform",
+                "A supported platform is required.");
+        }
+
+        if (rendererVersion < 1)
+        {
+            return BadRequest<DashboardCatalogResponse>(
+                "invalid_renderer_version",
+                "rendererVersion must be at least 1.");
+        }
+
+        var compiledCapabilities = capabilities
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var definitions = await repository.GetDefinitionsAsync(
+            cancellationToken);
+
+        var evaluatedDefinitions = definitions
+            .Select(definition => new
+            {
+                Definition = definition,
+                Access = tenantAccess.Evaluate(
+                    tenantId,
+                    definition.DashboardCode)
+            })
+            .ToArray();
+        if (evaluatedDefinitions.Any(item =>
+                item.Access.Failure ==
+                    DashboardTenantAccessFailure.ConfigurationInvalid))
+        {
+            return TenantAccessUnavailable<DashboardCatalogResponse>();
+        }
+
+        var catalog = evaluatedDefinitions
+            .Where(item => item.Access.Allowed)
+            .Where(item => rendererVersion >=
+                item.Definition.MinRendererVersion)
+            .Where(item => item.Definition.RequiredCapabilities.All(
+                compiledCapabilities.Contains))
+            .OrderBy(item => item.Access.DisplayOrder)
+            .ThenBy(item => item.Definition.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(item => new DashboardCatalogItem(
+                item.Definition.ScreenId,
+                item.Definition.DashboardCode,
+                item.Definition.Title,
+                item.Definition.DefinitionVersion,
+                item.Definition.MinRendererVersion,
+                item.Definition.RequiredCapabilities,
+                item.Access.DisplayOrder))
+            .ToArray();
+
+        return DashboardServiceResult<DashboardCatalogResponse>.Success(
+            new DashboardCatalogResponse(catalog));
+    }
+
     public async Task<DashboardServiceResult<DashboardDefinitionResponse>>
         GetDefinitionAsync(
             string screenId,
+            string tenantId,
             ClientPlatform? platform,
             int rendererVersion,
             IReadOnlyList<string> capabilities,
@@ -45,6 +115,14 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             return NotFound<DashboardDefinitionResponse>(
                 "dashboard_not_found",
                 "No published dashboard is registered for this screen identifier.");
+        }
+
+        var access = tenantAccess.Evaluate(
+            tenantId,
+            definition.DashboardCode);
+        if (!access.Allowed)
+        {
+            return TenantAccessFailure<DashboardDefinitionResponse>(access);
         }
 
         if (rendererVersion < definition.MinRendererVersion)
@@ -89,6 +167,14 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             return NotFound<DashboardRowsResponse>(
                 "dashboard_not_found",
                 "No handler is registered for this dashboard.");
+        }
+
+        var access = tenantAccess.Evaluate(
+            callerId,
+            definition.DashboardCode);
+        if (!access.Allowed)
+        {
+            return TenantAccessFailure<DashboardRowsResponse>(access);
         }
 
         if (!definitionVersion.Equals(
@@ -210,6 +296,14 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
                 "No handler is registered for this dashboard.");
         }
 
+        var access = tenantAccess.Evaluate(
+            callerId,
+            definition.DashboardCode);
+        if (!access.Allowed)
+        {
+            return TenantAccessFailure<DashboardFilterOptionsResponse>(access);
+        }
+
         if (!definitionVersion.Equals(
                 definition.DefinitionVersion,
                 StringComparison.Ordinal))
@@ -266,6 +360,12 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             DashboardActionRequest request,
             CancellationToken cancellationToken)
     {
+        var access = tenantAccess.Evaluate(callerId, dashboardCode);
+        if (!access.Allowed)
+        {
+            return TenantAccessFailure<DashboardActionResponse>(access);
+        }
+
         var registration = repository.GetActionRegistration(
             dashboardCode.Trim(),
             actionCode.Trim());
@@ -443,6 +543,12 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             string callerId,
             CancellationToken cancellationToken)
     {
+        var access = tenantAccess.Evaluate(callerId, dashboardCode);
+        if (!access.Allowed)
+        {
+            return TenantAccessFailure<DashboardAttachmentsResponse>(access);
+        }
+
         if (string.IsNullOrWhiteSpace(documentGuid))
         {
             return BadRequest<DashboardAttachmentsResponse>(
@@ -625,6 +731,27 @@ public sealed class DynamicDashboardService(IDashboardRepository repository)
             code,
             "The requested dashboard resource was not found.",
             detail);
+
+    private static DashboardServiceResult<T> TenantForbidden<T>() =>
+        DashboardServiceResult<T>.Failure(
+            StatusCodes.Status403Forbidden,
+            "dashboard_tenant_forbidden",
+            "Dashboard access is not authorized.",
+            "The current tenant is not allowed to use this dashboard definition.");
+
+    private static DashboardServiceResult<T> TenantAccessUnavailable<T>() =>
+        DashboardServiceResult<T>.Failure(
+            StatusCodes.Status503ServiceUnavailable,
+            "dashboard_tenant_configuration_invalid",
+            "Dashboard access configuration is unavailable.",
+            "The server tenant policy is invalid. Contact support before retrying.",
+            retryable: false);
+
+    private static DashboardServiceResult<T> TenantAccessFailure<T>(
+        DashboardTenantAccessDecision decision) =>
+        decision.Failure == DashboardTenantAccessFailure.ConfigurationInvalid
+            ? TenantAccessUnavailable<T>()
+            : TenantForbidden<T>();
 
     private static DashboardServiceResult<T> FromSourceFailure<T>(
         DashboardDataSourceException failure) =>

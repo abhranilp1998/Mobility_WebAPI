@@ -52,6 +52,10 @@ public sealed class ConfiguredDashboardRepository(
     public bool IsTaskStatusLive(string dashboardCode) =>
         IsTaskStatus(dashboardCode) && TaskStatusIsLive;
 
+    public Task<IReadOnlyList<DashboardDefinitionResponse>> GetDefinitionsAsync(
+        CancellationToken cancellationToken) =>
+        inMemory.GetDefinitionsAsync(cancellationToken);
+
     public Task<DashboardDefinitionResponse?> GetDefinitionAsync(
         string screenId,
         CancellationToken cancellationToken) =>

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using System.Text.Json.Serialization;
 using Mobility.DynamicDashboard.Api.Data;
@@ -7,6 +9,36 @@ using Mobility.DynamicDashboard.Api.Infrastructure;
 using Mobility.DynamicDashboard.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Deployment-specific values are kept in an ignored project-local file. The
+// project publish target copies that file into every IIS publish output, so the
+// deployed folder is complete without editing appsettings or web.config on the
+// server. Loading it after the normal appsettings providers lets these
+// server-owned values override the checked-in empty placeholders.
+var configuredServerConfigurationPath = builder.Configuration[
+    "DashboardApi:ServerConfigurationPath"];
+var serverConfigurationPath = string.IsNullOrWhiteSpace(
+        configuredServerConfigurationPath)
+    ? OperatingSystem.IsWindows()
+        ? Path.Combine(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.CommonApplicationData),
+            "CoralERP",
+            "MobilityDashboardApi",
+            "appsettings.Server.json")
+        : string.Empty
+    : configuredServerConfigurationPath.Trim();
+
+if (serverConfigurationPath.Length > 0)
+{
+    builder.Configuration.AddJsonFile(
+        serverConfigurationPath,
+        optional: true,
+        reloadOnChange: true);
+}
+
+builder.Services.AddSingleton(
+    new ServerConfigurationRegistration(serverConfigurationPath));
 
 builder.Services
     .AddControllers()
@@ -39,7 +71,11 @@ builder.Services.AddProblemDetails(options =>
             false);
     };
 });
-builder.Services.AddHealthChecks();
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<DashboardTenantAccessHealthCheck>(
+        "dashboard_tenant_access",
+        tags: ["ready"]);
 builder.Services.AddOpenApi("v1", options =>
 {
     options.AddDocumentTransformer((document, _, _) =>
@@ -228,7 +264,20 @@ builder.Services.AddCors(options =>
         policy.AllowAnyHeader().AllowAnyMethod();
     });
 });
+builder.Services
+    .AddOptions<DashboardTenantAccessOptions>()
+    .Bind(builder.Configuration.GetSection("DashboardApi:TenantAccess"))
+    .ValidateOnStart();
+builder.Services.AddSingleton<
+    IValidateOptions<DashboardTenantAccessOptions>,
+    DashboardTenantAccessOptionsValidator>();
+builder.Services.AddSingleton<
+    IDashboardTenantAccessService,
+    DashboardTenantAccessService>();
 builder.Services.AddScoped<IDynamicDashboardService, DynamicDashboardService>();
+builder.Services.AddSingleton<
+    IConfigurationDiagnosticsService,
+    ConfigurationDiagnosticsService>();
 builder.Services
     .AddOptions<CurrentOppLiveOptions>()
     .Bind(builder.Configuration.GetSection("DashboardApi:CurrentOpp"));
@@ -294,7 +343,20 @@ app.UseCors("DashboardCors");
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapHealthChecks("/health");
+// Keep the established liveness probe independent from deployment readiness.
+// Compatibility mode must not make an otherwise running API look dead.
+app.MapHealthChecks(
+    "/health",
+    new HealthCheckOptions
+    {
+        Predicate = _ => false
+    });
+app.MapHealthChecks(
+    "/health/ready",
+    new HealthCheckOptions
+    {
+        Predicate = registration => registration.Tags.Contains("ready")
+    });
 app.MapControllers();
 
 app.Run();

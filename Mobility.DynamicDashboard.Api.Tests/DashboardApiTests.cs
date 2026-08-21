@@ -22,6 +22,32 @@ public sealed class DashboardApiTests(
     private readonly HttpClient _client = factory.CreateClient();
 
     [Fact]
+    public async Task Health_SeparatesLivenessFromTenantReadiness()
+    {
+        using var liveness = await _client.GetAsync("/health");
+        using var readiness = await _client.GetAsync("/health/ready");
+
+        Assert.Equal(HttpStatusCode.OK, liveness.StatusCode);
+        Assert.Equal(
+            HttpStatusCode.ServiceUnavailable,
+            readiness.StatusCode);
+    }
+
+    [Fact]
+    public async Task Catalog_PreservesAllDefinitionsWhenTenantEnforcementIsOff()
+    {
+        using var response = await _client.GetAsync(
+            "/api/v1/dashboards/catalog?platform=web&rendererVersion=1&" +
+            RequiredCapabilities);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = await ReadJsonAsync(response);
+        Assert.Equal(
+            4,
+            body.RootElement.GetProperty("dashboards").GetArrayLength());
+    }
+
+    [Fact]
     public async Task CurrentOppDefinition_ReturnsReviewedContractAndRealScreenId()
     {
         using var response = await _client.GetAsync(CompatibleDefinitionUri());
@@ -557,7 +583,16 @@ public sealed class DashboardApiTests(
 
         Assert.Equal("3.1.1", root.GetProperty("openapi").GetString());
         var paths = root.GetProperty("paths");
-        Assert.Equal(5, paths.EnumerateObject().Count());
+        Assert.Equal(6, paths.EnumerateObject().Count());
+        Assert.True(paths.TryGetProperty(
+            "/api/v1/dashboards/catalog",
+            out var catalogPath));
+        Assert.Equal(
+            "getDashboardCatalog",
+            catalogPath
+                .GetProperty("get")
+                .GetProperty("operationId")
+                .GetString());
         Assert.True(paths.TryGetProperty(
             "/api/v1/dashboards/{screenId}/definition",
             out var definitionPath));
@@ -610,6 +645,10 @@ public sealed class DashboardApiTests(
                 .GetString());
 
         var schemas = root.GetProperty("components").GetProperty("schemas");
+        Assert.True(
+            schemas.GetProperty("DashboardCatalogItem")
+                .GetProperty("properties")
+                .TryGetProperty("displayOrder", out _));
         Assert.True(
             schemas.GetProperty("DashboardDefinitionResponse")
                 .GetProperty("properties")

@@ -81,8 +81,9 @@ public sealed class CurrentOppScopeResolver(
         bool useConfiguredDefaults)
     {
         var settings = options.Value;
+        var normalizedCaller = callerId.Trim();
         var tenant = settings.Tenants.FirstOrDefault(item =>
-            item.Key.Equals(callerId.Trim(), StringComparison.OrdinalIgnoreCase))
+            item.Key.Equals(normalizedCaller, StringComparison.OrdinalIgnoreCase))
             .Value;
 
         if (tenant is null)
@@ -93,7 +94,12 @@ public sealed class CurrentOppScopeResolver(
                 "The authenticated caller has no authorized Current Opp scope.");
         }
 
-        var customerId = tenant.CustomerId.Trim();
+        // The login subject is the tenant/customer identity by default. An
+        // explicit value remains supported for legacy installations where the
+        // authenticated subject and ERP customer identifier differ.
+        var customerId = string.IsNullOrWhiteSpace(tenant.CustomerId)
+            ? normalizedCaller
+            : tenant.CustomerId.Trim();
         var connection = string.IsNullOrWhiteSpace(tenant.LegacyConnection)
             ? configuration.GetConnectionString(settings.Legacy.ConnectionStringName)?.Trim()
             : tenant.LegacyConnection.Trim();
@@ -137,7 +143,7 @@ public sealed class CurrentOppScopeResolver(
             useConfiguredDefaults);
 
         return new CurrentOppScope(
-            callerId.Trim(),
+            normalizedCaller,
             customerId,
             branchId,
             financialYearId,

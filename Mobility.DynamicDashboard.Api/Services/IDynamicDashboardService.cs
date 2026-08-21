@@ -4,8 +4,16 @@ namespace Mobility.DynamicDashboard.Api.Services;
 
 public interface IDynamicDashboardService
 {
+    Task<DashboardServiceResult<DashboardCatalogResponse>> GetCatalogAsync(
+        string tenantId,
+        ClientPlatform? platform,
+        int rendererVersion,
+        IReadOnlyList<string> capabilities,
+        CancellationToken cancellationToken);
+
     Task<DashboardServiceResult<DashboardDefinitionResponse>> GetDefinitionAsync(
         string screenId,
+        string tenantId,
         ClientPlatform? platform,
         int rendererVersion,
         IReadOnlyList<string> capabilities,

@@ -80,7 +80,11 @@ public sealed class WorkDoneScopeResolver(
                 "The authenticated caller has no authorized Work Done scope.");
         }
 
-        var customerId = tenant.CustomerId.Trim();
+        // Default the ERP customer to the authenticated login tenant. Existing
+        // explicit mappings continue to override this for non-aligned IDs.
+        var customerId = string.IsNullOrWhiteSpace(tenant.CustomerId)
+            ? normalizedCaller
+            : tenant.CustomerId.Trim();
         var connection = string.IsNullOrWhiteSpace(tenant.LegacyConnection)
             ? configuration.GetConnectionString(settings.Legacy.ConnectionStringName)?.Trim()
             : tenant.LegacyConnection.Trim();

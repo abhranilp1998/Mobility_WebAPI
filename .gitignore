@@ -1,0 +1,11 @@
+artifacts/
+**/bin/
+**/obj/
+.DS_Store
+**/.DS_Store
+
+# Server credentials are copied into publish output automatically but must not
+# be committed. The publish target fails if this local deployment file is
+# missing, preventing an incomplete IIS folder from being produced.
+Mobility.DynamicDashboard.Api/appsettings.Server.json
+Mobility.DynamicDashboard.Api/appsettings.Production.json

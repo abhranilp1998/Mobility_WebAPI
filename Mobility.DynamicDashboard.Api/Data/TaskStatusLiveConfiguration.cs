@@ -85,7 +85,11 @@ public sealed class TaskStatusScopeResolver(
                 "The authenticated caller has no authorized Task Status scope.");
         }
 
-        var customerId = tenant.CustomerId.Trim();
+        // Default the ERP customer to the authenticated login tenant. Existing
+        // explicit mappings continue to override this for non-aligned IDs.
+        var customerId = string.IsNullOrWhiteSpace(tenant.CustomerId)
+            ? normalizedCaller
+            : tenant.CustomerId.Trim();
         var loginUserId = string.IsNullOrWhiteSpace(tenant.LoginUserId)
             ? customerId
             : tenant.LoginUserId.Trim();

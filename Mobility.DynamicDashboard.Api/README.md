@@ -47,6 +47,7 @@ Useful local URLs:
 - Swagger UI: [http://localhost:5282/swagger](http://localhost:5282/swagger)
 - OpenAPI JSON: [http://localhost:5282/swagger/v1/swagger.json](http://localhost:5282/swagger/v1/swagger.json)
 - Health check: [http://localhost:5282/health](http://localhost:5282/health)
+- Deployment readiness: [http://localhost:5282/health/ready](http://localhost:5282/health/ready)
 
 ## Database connection strings
 
@@ -77,6 +78,58 @@ When the SQL repository is wired, read them with
 other names as needed). For deployment, provide the same values through the
 platform secret store or environment variables such as
 `ConnectionStrings__DefaultConnection`; do not commit plaintext credentials.
+
+## Windows IIS publishing
+
+Select the committed `WindowsIIS` publish profile in Rider, or run:
+
+```bash
+dotnet publish \
+  Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj \
+  -p:PublishProfile=WindowsIIS
+```
+
+The ready-to-copy Windows IIS folder is produced at:
+
+```text
+Mobility.DynamicDashboard.Api/bin/Release/net10.0/win-x64/publish
+```
+
+Current server routing is intentionally split:
+
+```text
+Dashboard API IIS site: 192.168.192.193:5282
+Legacy ASMX service:     192.168.192.196:8087/service1.asmx
+SQL database:            192.168.192.193 / anupalan_live
+```
+
+The API's three live adapters therefore use
+`http://192.168.192.196:8087` as their server-owned legacy base URL. Flutter
+continues to call the public Dashboard API address and never calls these
+private addresses directly.
+
+The project requires the ignored local
+`Mobility.DynamicDashboard.Api/appsettings.Server.json` during every publish
+and automatically copies it into that output. Publishing fails rather than
+creating an incomplete folder if this file is missing. The file already holds
+the working `anupalan_live` connection used by this deployment; do not edit the
+published JSON or `web.config` on the server.
+
+The current HTTP-only workplace deployment intentionally runs with the
+Development authentication handler. The committed `web.config` preserves that
+environment across every publish. Moving to real Production still requires
+the configured JWT Authority/Audience and the corresponding HTTPS and
+authentication work described above.
+
+`appsettings.Server.json` is excluded from source control because the publish
+folder contains the database credential. Restrict access to the project and
+published folder accordingly. It is a deployment input owned by the API and
+must never be sent by Flutter.
+
+Stop the application pool while replacing the deployed folder, then start it
+once. A normal publish copy does not require an IIS-wide restart. Use
+`iisreset` only when the Hosting Bundle/IIS module itself was installed or
+changed, or when a targeted pool restart cannot recover the application.
 
 Run tests with:
 
@@ -113,25 +166,123 @@ Authorization: Bearer <access-token>
 The API does not invent production issuer, audience, tenant, secret, or
 identity configuration.
 
+## Tenant-controlled dashboard catalog
+
+The authenticated login subject is the current tenant. Clients should load the
+tenant-filtered catalog before requesting individual definitions:
+
+```http
+GET /api/v1/dashboards/catalog?platform=android&rendererVersion=1&capability=groupedCardList
+```
+
+The catalog contains only safe dashboard identity, compatibility, and display
+order metadata. The same policy is enforced again for definition, rows,
+filter-option, action, and attachment requests, so a caller cannot bypass the
+catalog by constructing a dashboard URL directly.
+
+Existing deployments remain compatible while `Enforced` is `false`:
+
+```json
+{
+  "DashboardApi": {
+    "TenantAccess": {
+      "Enforced": false,
+      "Dashboards": {}
+    }
+  }
+}
+```
+
+Prepare the full mapping first, then enable enforcement in server-owned
+configuration. Once enabled, a missing definition entry or disabled entry
+denies access. An enabled dashboard with an empty or duplicate tenant list is
+invalid configuration and prevents startup instead of silently exposing or
+hiding the wrong dashboard:
+
+```json
+{
+  "DashboardApi": {
+    "TenantAccess": {
+      "Enforced": true,
+      "Dashboards": {
+        "CSPL_CURRENT_OPP_ALL_FOLLOWUPS": {
+          "Enabled": true,
+          "DisplayOrder": 10,
+          "AllowedTenants": ["<login-tenant-a>", "<login-tenant-b>"]
+        },
+        "CSPL_TASK_STATUS": {
+          "Enabled": false,
+          "DisplayOrder": 20,
+          "AllowedTenants": []
+        }
+      }
+    }
+  }
+}
+```
+
+The policy uses stable dashboard codes, not screen aliases or titles, and is
+read through reloadable options. This lets an administrator change access and
+ordering in the server configuration without rebuilding Flutter or the API.
+Always keep real tenant IDs in protected deployment configuration rather than
+checked-in JSON.
+
+Enforced mappings are validated for non-empty, unique tenant grants and valid
+display order. `/health` remains the compatibility-safe liveness probe;
+`/health/ready` reports healthy only when tenant enforcement is enabled and its
+configuration is valid. An invalid policy reload fails closed with
+`dashboard_tenant_configuration_invalid` instead of exposing a dashboard.
+
+### Safe production rollout
+
+Use this sequence so the existing single-customer deployment remains working:
+
+1. Leave `TenantAccess:Enforced` set to `false`.
+2. Add every known login tenant to each dashboard it is allowed to use. A
+   tenant can be present in one, several, or all dashboard lists.
+3. Add the matching server-side live scope under
+   `DashboardApi:<Dashboard>:Tenants:<login-tenant>`. Omit `CustomerId` when
+   the login tenant is already the ERP customer ID; keep it only as a legacy
+   override when the two identifiers genuinely differ.
+4. Verify each tenant's branch, financial-year, connection, and legacy source
+   mapping from the API server. Never send these values from Flutter.
+5. Set `Enforced` to `true`, then require both `/health` and `/health/ready` to
+   return `200` before putting the worker into service.
+6. Call `/api/v1/dashboards/catalog` as each pilot tenant and confirm the exact
+   dashboard set and order before expanding the rollout.
+
+The access options reload from the protected server JSON, so an administrator
+can add or remove a grant without rebuilding. Replace the JSON atomically and
+recheck `/health/ready`; do not leave a partially written file for the watcher
+to read. Setting `Enforced` back to `false` is the compatibility rollback and
+restores the pre-allowlist behavior without changing definitions or live scope
+mappings.
+
 ## Recommended client flow
 
-For each dashboard:
+For the signed-in tenant:
 
-1. Load the definition using its `screenId`.
-2. Store `definitionVersion`, `etag`, filters, grouping, card, attachments,
+1. Load the authorized catalog and render only the returned dashboard cards.
+2. Load each selected definition using its returned `screenId`.
+3. Store `definitionVersion`, `etag`, filters, grouping, card, attachments,
    and actions from the response.
-3. Load options for declared `singleSelect` filters.
-4. Query rows using only the definition's filter keys and sort fields.
-5. Render `row.values` using the definition's card and grouping metadata.
-6. Expose an action only when it is declared by the definition and enabled in
+4. Load options for declared `singleSelect` filters.
+5. Query rows using only the definition's filter keys and sort fields.
+6. Render `row.values` using the definition's card and grouping metadata.
+7. Expose an action only when it is declared by the definition and enabled in
    the row's `commands`.
-7. Load attachments only when requested by the user, using `attachmentRef`.
+8. Load attachments only when requested by the user, using `attachmentRef`.
 
 ## 1. Health check
 
 ```http
 GET /health
 ```
+
+`/health` remains the liveness check and is unchanged for existing monitoring.
+`/health/ready` is the production tenant-policy gate: it returns `503` while
+enforcement is disabled or its configuration is invalid, and `200` only after
+an enforced policy has at least one valid enabled dashboard grant.
 
 Example:
 
@@ -141,6 +292,34 @@ curl http://localhost:5282/health
 
 Use this to distinguish an unavailable API from a missing dashboard definition
 or unavailable row source.
+
+### Local configuration diagnostic
+
+When the IIS site runs in Development, an authenticated request originating on
+the API server itself can inspect which connection source won configuration
+precedence:
+
+```powershell
+Invoke-RestMethod `
+  http://localhost:5282/internal/diagnostics/configuration `
+  -Headers @{ "X-Development-User" = "diagnostics" } |
+  ConvertTo-Json -Depth 8
+```
+
+The endpoint is omitted from Swagger, returns `404` outside Development, and
+also returns `404` to non-loopback callers. Its response contains only provider
+labels and SHA-256 fingerprints. It never returns a raw tenant ID, legacy URL,
+connection string, SQL username, or password.
+
+For each configured tenant, `effectiveSource` has one of these values:
+
+- `tenantLegacyConnection`: that tenant's non-empty `LegacyConnection` won.
+- `namedConnection`: the tenant override was empty, so
+  `ConnectionStrings:<connectionStringName>` won.
+- `missing`: neither source supplied a usable value.
+
+After copying a new publish folder, recycle the application pool before using
+this endpoint so the snapshot comes from the new worker process.
 
 ## 2. Load a dashboard definition
 
@@ -544,11 +723,12 @@ Common status codes:
 |---:|---|---|
 | `400` | `validation_failed`, `invalid_filter`, `invalid_sort`, `invalid_action_input` | Request shape or value is invalid. |
 | `401` | `authentication_required` | No valid authentication was supplied. |
-| `403` | `acting_user_forbidden`, `action_forbidden`, `task_status_live_scope_forbidden`, `task_status_action_forbidden` | Caller, scope, or row is not authorized. |
+| `403` | `dashboard_tenant_forbidden`, `acting_user_forbidden`, `action_forbidden`, `task_status_live_scope_forbidden`, `task_status_action_forbidden` | Tenant, caller, scope, or row is not authorized. |
 | `404` | `dashboard_not_found`, `action_not_found`, `row_not_found` | Resource is not registered or does not exist. |
 | `409` | `renderer_incompatible`, `definition_changed`, `row_changed` | Refresh compatibility metadata or the authoritative row. |
 | `502` | `task_status_live_source_invalid_response` | The legacy source returned invalid JSON. |
 | `503` | `task_status_live_configuration_missing`, `task_status_live_source_unavailable` | Fix server configuration or retry the unavailable source. |
+| `503` | `dashboard_tenant_configuration_invalid` | Repair the server-owned tenant policy before serving dashboards. |
 | `400` | `task_status_live_scope_required` | Supply an allowed branch/year in the request context. |
 | `504` | `task_status_live_source_timeout` | The bounded legacy request timed out; retry later. |
 
@@ -606,9 +786,8 @@ The equivalent environment configuration is:
 
 ```sh
 export DashboardApi__CurrentOpp__Mode=Live
-export DashboardApi__CurrentOpp__Legacy__BaseUrl='http://103.25.126.89:8087'
+export DashboardApi__CurrentOpp__Legacy__BaseUrl='http://192.168.192.196:8087'
 export DashboardApi__CurrentOpp__Legacy__TimeoutSeconds=30
-export DashboardApi__CurrentOpp__Tenants__development-user__CustomerId='<approved-customer-id>'
 export DashboardApi__CurrentOpp__Tenants__development-user__LegacyConnection='<approved-connection-alias>'
 export DashboardApi__CurrentOpp__Tenants__development-user__DefaultBranchId='<approved-branch-id>'
 export DashboardApi__CurrentOpp__Tenants__development-user__DefaultFinancialYearId='<approved-financial-year-id>'
@@ -616,10 +795,13 @@ export DashboardApi__CurrentOpp__Tenants__development-user__AllowedBranchIds__0=
 export DashboardApi__CurrentOpp__Tenants__development-user__AllowedFinancialYearIds__0='<approved-financial-year-id>'
 ```
 
-`CustomerId` and `LegacyConnection` must come from an authorized tenant
-mapping or secret-backed provider. Do not put the actual values in source
-control or the Flutter request. For multiple authorized branches/years, add
-`__1`, `__2`, and so on to the corresponding allow-list variables.
+When the login tenant ID is also the ERP customer ID, omit `CustomerId`; the
+resolver uses the authenticated subject. Configure `CustomerId` only as a
+server-side override when those IDs genuinely differ. `LegacyConnection` must
+come from an authorized tenant mapping or secret-backed provider. Do not put
+actual values in source control or the Flutter request. For multiple authorized
+branches/years, add `__1`, `__2`, and so on to the corresponding allow-list
+variables.
 
 Run the API in live mode:
 
@@ -715,7 +897,6 @@ export DashboardApi__TaskStatus__Mode=Live
 export DashboardApi__TaskStatus__Legacy__BaseUrl='https://<approved-legacy-host>'
 export DashboardApi__TaskStatus__Legacy__TimeoutSeconds=30
 export DashboardApi__TaskStatus__Legacy__ConnectionStringName=anupalan
-export DashboardApi__TaskStatus__Tenants__<caller-id>__CustomerId='<authorized-customer-id>'
 export DashboardApi__TaskStatus__Tenants__<caller-id>__LoginUserId='<authorized-login-user-id>'
 export DashboardApi__TaskStatus__Tenants__<caller-id>__TaskUserId='<authorized-task-user-id>'
 export DashboardApi__TaskStatus__Tenants__<caller-id>__DefaultBranchId='<authorized-branch-id>'
@@ -723,6 +904,9 @@ export DashboardApi__TaskStatus__Tenants__<caller-id>__DefaultFinancialYearId='<
 export DashboardApi__TaskStatus__Tenants__<caller-id>__AllowedBranchIds__0='<authorized-branch-id>'
 export DashboardApi__TaskStatus__Tenants__<caller-id>__AllowedFinancialYearIds__0='<authorized-financial-year-id>'
 ~~~
+
+Omit `CustomerId` when the authenticated login tenant is the ERP customer.
+Set it only as a protected server-side override when those identifiers differ.
 
 LegacyConnection can be set on a tenant when the tenant needs a dedicated
 server-side mapping. Otherwise the adapter reads the named connection string:
@@ -919,12 +1103,14 @@ export DashboardApi__WorkDone__Mode=Live
 export DashboardApi__WorkDone__Legacy__BaseUrl='https://<approved-legacy-host>'
 export DashboardApi__WorkDone__Legacy__TimeoutSeconds=60
 export DashboardApi__WorkDone__Legacy__ConnectionStringName=anupalan
-export DashboardApi__WorkDone__Tenants__<caller-id>__CustomerId='<authorized-customer-id>'
 export DashboardApi__WorkDone__Tenants__<caller-id>__DefaultBranchId='<authorized-branch-id>'
 export DashboardApi__WorkDone__Tenants__<caller-id>__DefaultFinancialYearId='<authorized-financial-year-id>'
 export DashboardApi__WorkDone__Tenants__<caller-id>__AllowedBranchIds__0='<authorized-branch-id>'
 export DashboardApi__WorkDone__Tenants__<caller-id>__AllowedFinancialYearIds__0='<authorized-financial-year-id>'
 ~~~
+
+Omit `CustomerId` when the authenticated login tenant is the ERP customer.
+Set it only as a protected server-side override when those identifiers differ.
 
 Alternatively, set a tenant-specific `LegacyConnection` value through the
 server-side configuration provider. Do not send `_Conn`, a legacy URL, or

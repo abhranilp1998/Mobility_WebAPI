@@ -25,4 +25,24 @@
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.1.0" />
   </ItemGroup>
 
+  <!--
+    A normal Rider/dotnet publish must be deployable as-is. The ignored local
+    server settings file contains the real connection value, is required at
+    publish time, and is copied into the output only after the Web SDK has
+    completed its normal publish pipeline.
+  -->
+  <Target Name="RequireServerSettingsForPublish" BeforeTargets="Publish">
+    <Error
+      Condition="!Exists('$(MSBuildProjectDirectory)/appsettings.Server.json')"
+      Text="Publishing requires Mobility.DynamicDashboard.Api/appsettings.Server.json. Restore the local server settings file before publishing." />
+  </Target>
+
+  <Target Name="CopyServerSettingsToPublish"
+          AfterTargets="Publish"
+          DependsOnTargets="RequireServerSettingsForPublish">
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)/appsettings.Server.json"
+      DestinationFolder="$(PublishDir)" />
+  </Target>
+
 </Project>

@@ -131,6 +131,16 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
     private readonly ConcurrentDictionary<string, DashboardActionResponse>
         _idempotentResponses = new(StringComparer.Ordinal);
 
+    public Task<IReadOnlyList<DashboardDefinitionResponse>> GetDefinitionsAsync(
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<DashboardDefinitionResponse> definitions = Definitions
+            .Values
+            .OrderBy(item => item.DashboardCode, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return Task.FromResult(definitions);
+    }
+
     public Task<DashboardDefinitionResponse?> GetDefinitionAsync(
         string screenId,
         CancellationToken cancellationToken)
@@ -616,8 +626,7 @@ public sealed class InMemoryDashboardRepository : IDashboardRepository
                 TaskStatusScreenId,
                 "Use the existing dashboard when the renderer is incompatible or the POC is disabled."),
             new DashboardDefinition(
-                // "groupedCardList",
-                "null",
+                "groupedCardList",
                 "taskGuid",
                 [
                     new(

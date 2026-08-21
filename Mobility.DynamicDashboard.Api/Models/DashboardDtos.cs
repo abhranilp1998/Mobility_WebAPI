@@ -98,6 +98,22 @@ public sealed record DashboardDefinitionResponse(
     DashboardFallback Fallback,
     DashboardDefinition Definition);
 
+/// <summary>
+/// Tenant-filtered hallway metadata. It deliberately excludes legacy source
+/// names, tenant mappings, connection values, and implementation details.
+/// </summary>
+public sealed record DashboardCatalogResponse(
+    IReadOnlyList<DashboardCatalogItem> Dashboards);
+
+public sealed record DashboardCatalogItem(
+    string ScreenId,
+    string DashboardCode,
+    string Title,
+    string DefinitionVersion,
+    int MinRendererVersion,
+    IReadOnlyList<string> RequiredCapabilities,
+    int DisplayOrder);
+
 public sealed record DashboardDefinition(
     string Layout,
     string RowIdentityField,

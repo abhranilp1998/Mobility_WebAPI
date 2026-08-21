@@ -6,6 +6,14 @@ Accept: application/json
 
 ###
 
+# Tenant-filtered hallway catalog. In Development, the header value is the
+# current login tenant; Production derives the same identity from its token.
+GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/catalog?platform=web&rendererVersion=1&capability=groupedCardList&capability=dropdownFilter&capability=textSearch&capability=dateProximityTone&capability=attachmentDialog&capability=clientNavigation
+X-Development-User: development-user
+Accept: application/json
+
+###
+
 # Current Opp definition. Every required compiled capability is repeated.
 GET {{Mobility.DynamicDashboard.Api_HostAddress}}/api/v1/dashboards/843cb318_4007_4f62_91c5_fa400d1a31c5/definition?platform=web&rendererVersion=1&capability=groupedCardList&capability=dropdownFilter&capability=textSearch&capability=dateProximityTone&capability=attachmentDialog&capability=clientNavigation
 Accept: application/json

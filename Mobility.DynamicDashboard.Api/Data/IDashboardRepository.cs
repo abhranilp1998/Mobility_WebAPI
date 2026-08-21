@@ -10,6 +10,9 @@ public sealed record DashboardActionRegistration(
 
 public interface IDashboardRepository
 {
+    Task<IReadOnlyList<DashboardDefinitionResponse>> GetDefinitionsAsync(
+        CancellationToken cancellationToken);
+
     Task<DashboardDefinitionResponse?> GetDefinitionAsync(
         string screenId,
         CancellationToken cancellationToken);
