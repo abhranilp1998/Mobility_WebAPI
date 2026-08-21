@@ -60,7 +60,7 @@ public sealed class LegacyWorkDoneSource(
             "service1.asmx/WorkDoneRPF",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection,
+                ["_Conn"] = scope.LegacyDatabaseAlias,
                 // ASMX requires empty arguments to be present as key=value.
                 ["FromDate"] = query.FromDate,
                 ["ToDate"] = query.ToDate,
@@ -85,7 +85,7 @@ public sealed class LegacyWorkDoneSource(
             "service1.asmx/GetAttachmentSummary_AP",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection
+                ["_Conn"] = scope.LegacyDatabaseAlias
             },
             cancellationToken);
 

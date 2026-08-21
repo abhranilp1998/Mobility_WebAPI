@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Mobility.DynamicDashboard.Api.Data;
 using Xunit;
 
 namespace Mobility.DynamicDashboard.Api.Tests;
@@ -13,7 +14,7 @@ public sealed class LiveDashboardApiTests(
         "CSPL_CURRENT_OPP_ALL_FOLLOWUPS";
     private const string DefinitionVersion = "1.0.0";
 
-    private readonly HttpClient _client = factory.CreateClient();
+    private readonly HttpClient _client = CreateLiveClient(factory);
 
     [Fact]
     public async Task LiveRows_ReturnSourceRowsAndNormalizedContract()
@@ -105,7 +106,7 @@ public sealed class LiveDashboardApiTests(
         Assert.Equal("CUSTOMER-01", factory.Source.LastScope?.CustomerId);
         Assert.Equal("BR-01", factory.Source.LastScope?.BranchId);
         Assert.Equal("FY-2026", factory.Source.LastScope?.FinancialYearId);
-        Assert.Equal("anupalan-test-connection", factory.Source.LastScope?.LegacyConnection);
+        Assert.Equal("tenant_test", factory.Source.LastScope?.LegacyDatabaseAlias);
     }
 
     [Fact]
@@ -192,6 +193,16 @@ public sealed class LiveDashboardApiTests(
         var content = await response.Content.ReadAsStringAsync();
         return JsonDocument.Parse(content);
     }
+
+    private static HttpClient CreateLiveClient(
+        LiveDashboardApiFactory factory)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            LegacyDatabaseAliasHeader.Name,
+            "tenant_test");
+        return client;
+    }
 }
 
 public sealed class MissingLiveConfigurationTests(
@@ -224,6 +235,7 @@ public sealed class MissingLiveConfigurationTests(
             })
         };
         request.Headers.Add("X-Dashboard-Definition-Version", "1.0.0");
+        request.Headers.Add(LegacyDatabaseAliasHeader.Name, "tenant_test");
 
         using var response = await _client.SendAsync(request);
 

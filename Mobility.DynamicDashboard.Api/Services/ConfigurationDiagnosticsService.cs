@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Configuration.Json;
+using Mobility.DynamicDashboard.Api.Data;
 
 namespace Mobility.DynamicDashboard.Api.Services;
 
@@ -25,16 +25,9 @@ public sealed record ServerConfigurationDiagnostics(
 public sealed record DashboardConfigurationDiagnostics(
     string Dashboard,
     string Mode,
-    string ConnectionStringName,
+    string LegacyDatabaseAliasSource,
     int TenantCount,
-    IReadOnlyList<TenantConnectionDiagnostics> TenantConnections);
-
-public sealed record TenantConnectionDiagnostics(
-    string TenantFingerprint,
-    string EffectiveSource,
-    string ConfigurationProvider,
-    bool Configured,
-    string? ConnectionFingerprint);
+    IReadOnlyList<string> TenantFingerprints);
 
 public interface IConfigurationDiagnosticsService
 {
@@ -43,8 +36,9 @@ public interface IConfigurationDiagnosticsService
 
 /// <summary>
 /// Builds a deliberately secret-free view of the configuration that the live
-/// scope resolvers use. It reports only source labels and one-way fingerprints:
-/// never raw tenant IDs, URLs, connection strings, usernames, or passwords.
+/// scope resolvers use. It reports only source labels and one-way tenant
+/// fingerprints: never raw tenant IDs, URLs, database aliases, SQL connection
+/// strings, usernames, or passwords.
 /// </summary>
 public sealed class ConfigurationDiagnosticsService(
     IConfiguration configuration,
@@ -73,104 +67,20 @@ public sealed class ConfigurationDiagnosticsService(
         string dashboardName)
     {
         var dashboardKey = $"DashboardApi:{dashboardName}";
-        var connectionStringName =
-            configuration[$"{dashboardKey}:Legacy:ConnectionStringName"]?.Trim();
-        if (string.IsNullOrWhiteSpace(connectionStringName))
-        {
-            connectionStringName = "anupalan";
-        }
-
-        var namedConnectionKey = $"ConnectionStrings:{connectionStringName}";
-        var namedConnection = configuration[namedConnectionKey]?.Trim();
         var tenantSections = configuration
             .GetSection($"{dashboardKey}:Tenants")
             .GetChildren()
             .OrderBy(section => section.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var tenantConnections = tenantSections.Select(tenantSection =>
-        {
-            var tenantConnectionKey = $"{tenantSection.Path}:LegacyConnection";
-            var tenantConnection = configuration[tenantConnectionKey]?.Trim();
-            var usesTenantConnection =
-                !string.IsNullOrWhiteSpace(tenantConnection);
-            var effectiveConnection = usesTenantConnection
-                ? tenantConnection
-                : namedConnection;
-            var effectiveKey = usesTenantConnection
-                ? tenantConnectionKey
-                : namedConnectionKey;
-
-            return new TenantConnectionDiagnostics(
-                Fingerprint(tenantSection.Key),
-                usesTenantConnection
-                    ? "tenantLegacyConnection"
-                    : string.IsNullOrWhiteSpace(namedConnection)
-                        ? "missing"
-                        : "namedConnection",
-                FindProvider(effectiveKey),
-                Configured: !string.IsNullOrWhiteSpace(effectiveConnection),
-                ConnectionFingerprint:
-                    string.IsNullOrWhiteSpace(effectiveConnection)
-                        ? null
-                        : Fingerprint(effectiveConnection));
-        }).ToArray();
-
         return new DashboardConfigurationDiagnostics(
             dashboardName,
             configuration[$"{dashboardKey}:Mode"]?.Trim() ?? "InMemory",
-            connectionStringName,
+            $"requestHeader:{LegacyDatabaseAliasHeader.Name}",
             tenantSections.Length,
-            tenantConnections);
-    }
-
-    private string FindProvider(string key)
-    {
-        if (configuration is not IConfigurationRoot root)
-        {
-            return "unknown";
-        }
-
-        foreach (var provider in root.Providers.Reverse())
-        {
-            if (!provider.TryGet(key, out _))
-            {
-                continue;
-            }
-
-            if (provider is JsonConfigurationProvider jsonProvider)
-            {
-                var fileName = Path.GetFileName(jsonProvider.Source.Path);
-                return string.Equals(
-                        fileName,
-                        "secrets.json",
-                        StringComparison.OrdinalIgnoreCase)
-                    ? "userSecrets"
-                    : $"json:{fileName ?? "unknown"}";
-            }
-
-            var providerName = provider.GetType().Name;
-            if (providerName.Contains(
-                    "EnvironmentVariables",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return "environmentVariables";
-            }
-
-            if (providerName.Contains("Memory", StringComparison.OrdinalIgnoreCase))
-            {
-                return "inMemory";
-            }
-
-            if (providerName.Contains("CommandLine", StringComparison.OrdinalIgnoreCase))
-            {
-                return "commandLine";
-            }
-
-            return providerName;
-        }
-
-        return "notConfigured";
+            tenantSections
+                .Select(section => Fingerprint(section.Key))
+                .ToArray());
     }
 
     private string ResolvePath(string path) =>

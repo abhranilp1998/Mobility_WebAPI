@@ -16,7 +16,7 @@ public sealed class TaskStatusLiveApiTests(TaskStatusLiveApiFactory factory)
     private const string DashboardCode = "CSPL_TASK_STATUS";
     private const string DefinitionVersion = "1.0.0";
 
-    private readonly HttpClient _client = factory.CreateClient();
+    private readonly HttpClient _client = CreateLiveClient(factory);
 
     [Fact]
     public async Task Rows_CallLegacyTaskStatusExactlyOnceAndNormalizeMixedSources()
@@ -347,6 +347,16 @@ public sealed class TaskStatusLiveApiTests(TaskStatusLiveApiFactory factory)
         return await _client.SendAsync(request);
     }
 
+    private static HttpClient CreateLiveClient(
+        TaskStatusLiveApiFactory factory)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            LegacyDatabaseAliasHeader.Name,
+            "tenant_test");
+        return client;
+    }
+
     private async Task<HttpResponseMessage> ExecuteActionAsync(
         string actionCode,
         object inputs,
@@ -517,7 +527,7 @@ public sealed class TaskStatusLiveSourceAdapterTests
             "BR-01",
             "FY-2026",
             new Uri("http://legacy.test"),
-            "server-side-connection");
+            "tenant_test");
 
     private sealed class StaticResponseHandler(string responseJson)
         : HttpMessageHandler
@@ -581,6 +591,7 @@ public sealed class MissingTaskStatusLiveConfigurationTests(
             })
         };
         request.Headers.Add("X-Dashboard-Definition-Version", "1.0.0");
+        request.Headers.Add(LegacyDatabaseAliasHeader.Name, "tenant_test");
 
         using var response = await client.SendAsync(request);
 

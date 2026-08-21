@@ -172,8 +172,7 @@ public sealed class DashboardTenantAccessTests(
         {
             Legacy = new CurrentOppLegacyOptions
             {
-                BaseUrl = "https://legacy.invalid/",
-                ConnectionStringName = "test"
+                BaseUrl = "https://legacy.invalid/"
             },
             Tenants = new Dictionary<string, CurrentOppTenantScopeOptions>(
                 StringComparer.OrdinalIgnoreCase)
@@ -187,13 +186,9 @@ public sealed class DashboardTenantAccessTests(
                 }
             }
         });
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:test"] = "test-connection"
-            })
-            .Build();
-        var resolver = new CurrentOppScopeResolver(options, configuration);
+        var resolver = new CurrentOppScopeResolver(
+            options,
+            new FixedLegacyDatabaseAliasProvider());
 
         var scope = resolver.Resolve(
             TenantA,
@@ -210,8 +205,7 @@ public sealed class DashboardTenantAccessTests(
         {
             Legacy = new TaskStatusLegacyOptions
             {
-                BaseUrl = "https://legacy.invalid/",
-                ConnectionStringName = "test"
+                BaseUrl = "https://legacy.invalid/"
             },
             Tenants = new Dictionary<string, TaskStatusTenantScopeOptions>(
                 StringComparer.OrdinalIgnoreCase)
@@ -227,7 +221,7 @@ public sealed class DashboardTenantAccessTests(
         });
         var resolver = new TaskStatusScopeResolver(
             options,
-            TestConfiguration());
+            new FixedLegacyDatabaseAliasProvider());
 
         var scope = resolver.Resolve(
             TenantA,
@@ -246,8 +240,7 @@ public sealed class DashboardTenantAccessTests(
         {
             Legacy = new WorkDoneLegacyOptions
             {
-                BaseUrl = "https://legacy.invalid/",
-                ConnectionStringName = "test"
+                BaseUrl = "https://legacy.invalid/"
             },
             Tenants = new Dictionary<string, WorkDoneTenantScopeOptions>(
                 StringComparer.OrdinalIgnoreCase)
@@ -263,7 +256,7 @@ public sealed class DashboardTenantAccessTests(
         });
         var resolver = new WorkDoneScopeResolver(
             options,
-            TestConfiguration());
+            new FixedLegacyDatabaseAliasProvider());
 
         var scope = resolver.Resolve(
             TenantA,
@@ -288,13 +281,11 @@ public sealed class DashboardTenantAccessTests(
         $"/api/v1/dashboards/{screenId}/definition" +
         $"?platform=web&rendererVersion=1&{RequiredCapabilities}";
 
-    private static IConfiguration TestConfiguration() =>
-        new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:test"] = "test-connection"
-            })
-            .Build();
+    private sealed class FixedLegacyDatabaseAliasProvider
+        : ILegacyDatabaseAliasProvider
+    {
+        public string GetRequiredAlias() => "tenant_test";
+    }
 
     private static async Task<JsonDocument> ReadJsonAsync(
         HttpResponseMessage response)

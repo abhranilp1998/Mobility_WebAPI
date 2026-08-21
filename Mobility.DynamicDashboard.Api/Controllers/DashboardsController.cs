@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
+using Mobility.DynamicDashboard.Api.Data;
 using Mobility.DynamicDashboard.Api.Infrastructure;
 using Mobility.DynamicDashboard.Api.Models;
 using Mobility.DynamicDashboard.Api.Services;
@@ -95,8 +96,9 @@ public sealed class DashboardsController(IDynamicDashboardService service)
     /// <summary>Queries normalized rows through a whitelisted data source.</summary>
     /// <remarks>
     /// Dashboard and data-source codes are opaque server whitelist keys. Raw
-    /// SQL, legacy class/function names, URLs, and connection values are never
-    /// accepted from the client.
+    /// SQL, legacy class/function names, and URLs are never accepted from the
+    /// client. Live mode reads the short ASMX database alias from the
+    /// X-Legacy-Database header; SQL connection strings are rejected.
     /// </remarks>
     [HttpPost("{dashboardCode}/rows", Name = "queryDashboardRows")]
     [ProducesResponseType<DashboardRowsResponse>(StatusCodes.Status200OK)]
@@ -113,6 +115,8 @@ public sealed class DashboardsController(IDynamicDashboardService service)
          Required,
          RegularExpression(DefinitionVersionPattern)]
         string definitionVersion,
+        [FromHeader(Name = LegacyDatabaseAliasHeader.Name), StringLength(128)]
+        string? legacyDatabaseAlias,
         [FromBody] DashboardRowsRequest request,
         CancellationToken cancellationToken)
     {
@@ -153,6 +157,8 @@ public sealed class DashboardsController(IDynamicDashboardService service)
              Required,
              RegularExpression(DefinitionVersionPattern)]
             string definitionVersion,
+            [FromHeader(Name = LegacyDatabaseAliasHeader.Name), StringLength(128)]
+            string? legacyDatabaseAlias,
             [FromQuery, StringLength(100)]
             string? search,
             [FromQuery]
@@ -199,6 +205,8 @@ public sealed class DashboardsController(IDynamicDashboardService service)
         string definitionVersion,
         [FromHeader(Name = "Idempotency-Key")]
         string? idempotencyKey,
+        [FromHeader(Name = LegacyDatabaseAliasHeader.Name), StringLength(128)]
+        string? legacyDatabaseAlias,
         [FromBody] DashboardActionRequest request,
         CancellationToken cancellationToken)
     {
@@ -234,6 +242,8 @@ public sealed class DashboardsController(IDynamicDashboardService service)
         AttachmentSourceType? sourceType,
         [FromQuery, Required, StringLength(100, MinimumLength = 1)]
         string documentGuid,
+        [FromHeader(Name = LegacyDatabaseAliasHeader.Name), StringLength(128)]
+        string? legacyDatabaseAlias,
         CancellationToken cancellationToken)
     {
         var result = await service.GetAttachmentsAsync(

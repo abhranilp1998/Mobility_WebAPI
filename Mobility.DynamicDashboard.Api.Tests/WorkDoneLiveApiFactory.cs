@@ -34,7 +34,6 @@ public sealed class WorkDoneLiveApiFactory : WebApplicationFactory<Program>
                 ["DashboardApi:WorkDone:Mode"] = "Live",
                 ["DashboardApi:WorkDone:Legacy:BaseUrl"] = "http://legacy.test",
                 ["DashboardApi:WorkDone:Legacy:TimeoutSeconds"] = "5",
-                ["ConnectionStrings:anupalan"] = "work-done-test-connection",
                 ["DashboardApi:WorkDone:Tenants:development-user:CustomerId"] = "CUSTOMER-01",
                 ["DashboardApi:WorkDone:Tenants:development-user:DefaultBranchId"] = "BR-01",
                 ["DashboardApi:WorkDone:Tenants:development-user:DefaultFinancialYearId"] = "FY-2026",

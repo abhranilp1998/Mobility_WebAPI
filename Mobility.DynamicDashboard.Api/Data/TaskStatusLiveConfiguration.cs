@@ -6,8 +6,8 @@ namespace Mobility.DynamicDashboard.Api.Data;
 
 /// <summary>
 /// Server-owned configuration for the Task Status legacy adapter. The mobile
-/// client only sends the dashboard context; it never supplies a legacy URL,
-/// connection string, login ID, or task-user ID.
+/// client supplies its short Appdata.Conn_ database alias, but never a legacy
+/// URL, SQL connection string, login ID, or task-user ID.
 /// </summary>
 public sealed class TaskStatusLiveOptions
 {
@@ -25,8 +25,6 @@ public sealed class TaskStatusLegacyOptions
     public string BaseUrl { get; set; } = string.Empty;
 
     public int TimeoutSeconds { get; set; } = 30;
-
-    public string ConnectionStringName { get; set; } = "anupalan";
 }
 
 public sealed class TaskStatusTenantScopeOptions
@@ -36,8 +34,6 @@ public sealed class TaskStatusTenantScopeOptions
     public string LoginUserId { get; set; } = string.Empty;
 
     public string TaskUserId { get; set; } = string.Empty;
-
-    public string LegacyConnection { get; set; } = string.Empty;
 
     public string DefaultBranchId { get; set; } = string.Empty;
 
@@ -56,7 +52,7 @@ public sealed record TaskStatusScope(
     string BranchId,
     string FinancialYearId,
     Uri LegacyBaseUri,
-    string LegacyConnection);
+    string LegacyDatabaseAlias);
 
 /// <summary>
 /// Resolves an authenticated caller to an allow-listed legacy scope. Explicit
@@ -65,7 +61,7 @@ public sealed record TaskStatusScope(
 /// </summary>
 public sealed class TaskStatusScopeResolver(
     IOptions<TaskStatusLiveOptions> options,
-    IConfiguration configuration)
+    ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider)
 {
     public TaskStatusScope Resolve(
         string callerId,
@@ -96,18 +92,16 @@ public sealed class TaskStatusScopeResolver(
         var taskUserId = string.IsNullOrWhiteSpace(tenant.TaskUserId)
             ? customerId
             : tenant.TaskUserId.Trim();
-        var connection = string.IsNullOrWhiteSpace(tenant.LegacyConnection)
-            ? configuration.GetConnectionString(settings.Legacy.ConnectionStringName)?.Trim()
-            : tenant.LegacyConnection.Trim();
-
         if (customerId.Length == 0 || loginUserId.Length == 0 ||
-            taskUserId.Length == 0 || string.IsNullOrWhiteSpace(connection))
+            taskUserId.Length == 0)
         {
             throw Failure(
                 StatusCodes.Status503ServiceUnavailable,
                 "task_status_live_configuration_missing",
                 "The Task Status live tenant mapping is incomplete.");
         }
+
+        var legacyDatabaseAlias = legacyDatabaseAliasProvider.GetRequiredAlias();
 
         var baseUrl = settings.Legacy.BaseUrl?.Trim() ?? string.Empty;
         if (baseUrl.Length == 0)
@@ -148,7 +142,7 @@ public sealed class TaskStatusScopeResolver(
             branchId,
             financialYearId,
             baseUri,
-            connection);
+            legacyDatabaseAlias);
     }
 
     private static string ResolveScopeValue(

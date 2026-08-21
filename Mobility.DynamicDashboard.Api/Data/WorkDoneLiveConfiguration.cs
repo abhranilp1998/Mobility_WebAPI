@@ -6,8 +6,9 @@ namespace Mobility.DynamicDashboard.Api.Data;
 
 /// <summary>
 /// Server-owned settings for the CSPL Work Done adapter. The renderer sends
-/// only its authenticated caller and selected branch/FY; it never receives or
-/// supplies the legacy URL, connection value, or ASMX operation names.
+/// its authenticated caller, selected branch/FY, and short Appdata.Conn_
+/// database alias; it never receives or supplies the legacy URL, a SQL
+/// connection string, or ASMX operation names.
 /// </summary>
 public sealed class WorkDoneLiveOptions
 {
@@ -24,15 +25,11 @@ public sealed class WorkDoneLegacyOptions
     public string BaseUrl { get; set; } = string.Empty;
 
     public int TimeoutSeconds { get; set; } = 60;
-
-    public string ConnectionStringName { get; set; } = "anupalan";
 }
 
 public sealed class WorkDoneTenantScopeOptions
 {
     public string CustomerId { get; set; } = string.Empty;
-
-    public string LegacyConnection { get; set; } = string.Empty;
 
     public string DefaultBranchId { get; set; } = string.Empty;
 
@@ -49,7 +46,7 @@ public sealed record WorkDoneScope(
     string BranchId,
     string FinancialYearId,
     Uri LegacyBaseUri,
-    string LegacyConnection);
+    string LegacyDatabaseAlias);
 
 /// <summary>
 /// Resolves one authenticated caller to an allow-listed Work Done tenant.
@@ -60,7 +57,7 @@ public sealed record WorkDoneScope(
 /// </summary>
 public sealed class WorkDoneScopeResolver(
     IOptions<WorkDoneLiveOptions> options,
-    IConfiguration configuration)
+    ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider)
 {
     public WorkDoneScope Resolve(
         string callerId,
@@ -85,16 +82,15 @@ public sealed class WorkDoneScopeResolver(
         var customerId = string.IsNullOrWhiteSpace(tenant.CustomerId)
             ? normalizedCaller
             : tenant.CustomerId.Trim();
-        var connection = string.IsNullOrWhiteSpace(tenant.LegacyConnection)
-            ? configuration.GetConnectionString(settings.Legacy.ConnectionStringName)?.Trim()
-            : tenant.LegacyConnection.Trim();
-        if (customerId.Length == 0 || string.IsNullOrWhiteSpace(connection))
+        if (customerId.Length == 0)
         {
             throw Failure(
                 StatusCodes.Status503ServiceUnavailable,
                 "work_done_live_configuration_missing",
                 "The Work Done live tenant mapping is incomplete.");
         }
+
+        var legacyDatabaseAlias = legacyDatabaseAliasProvider.GetRequiredAlias();
 
         var baseUrl = settings.Legacy.BaseUrl?.Trim() ?? string.Empty;
         if (baseUrl.Length == 0)
@@ -133,7 +129,7 @@ public sealed class WorkDoneScopeResolver(
             branchId,
             financialYearId,
             baseUri,
-            connection);
+            legacyDatabaseAlias);
     }
 
     private static string ResolveScopeValue(

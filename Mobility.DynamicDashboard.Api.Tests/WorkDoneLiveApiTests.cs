@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Mobility.DynamicDashboard.Api.Data;
 using Xunit;
 
 namespace Mobility.DynamicDashboard.Api.Tests;
@@ -10,7 +11,7 @@ public sealed class WorkDoneLiveApiTests(WorkDoneLiveApiFactory factory)
 {
     private const string DashboardCode = "CSPL_WORK_DONE";
     private const string DefinitionVersion = "1.0.0";
-    private readonly HttpClient client = factory.CreateClient();
+    private readonly HttpClient client = CreateLiveClient(factory);
 
     [Fact]
     public async Task Rows_CallLegacyOnceAndNormalizeWorkDoneFields()
@@ -154,5 +155,15 @@ public sealed class WorkDoneLiveApiTests(WorkDoneLiveApiFactory factory)
         request.Headers.Add("X-Development-User", "development-user");
         request.Headers.Add("X-Dashboard-Definition-Version", DefinitionVersion);
         return await client.SendAsync(request);
+    }
+
+    private static HttpClient CreateLiveClient(
+        WorkDoneLiveApiFactory factory)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            LegacyDatabaseAliasHeader.Name,
+            "tenant_test");
+        return client;
     }
 }

@@ -70,7 +70,7 @@ public sealed class LegacyTaskStatusSource(
             "service1.asmx/Get_taskStatus",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection,
+                ["_Conn"] = scope.LegacyDatabaseAlias,
                 ["LoginUserID"] = scope.LoginUserId,
                 ["TaskUserID"] = scope.TaskUserId
             },
@@ -90,7 +90,7 @@ public sealed class LegacyTaskStatusSource(
             "service1.asmx/checkIfUserIsAdmin",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection,
+                ["_Conn"] = scope.LegacyDatabaseAlias,
                 ["UID"] = scope.LoginUserId
             },
             cancellationToken);
@@ -109,7 +109,7 @@ public sealed class LegacyTaskStatusSource(
             "service1.asmx/GetAttachmentSummary_AP",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection
+                ["_Conn"] = scope.LegacyDatabaseAlias
             },
             cancellationToken);
 
@@ -129,7 +129,7 @@ public sealed class LegacyTaskStatusSource(
             "GN25_CurrentWorkOn_mApp",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection,
+                ["_Conn"] = scope.LegacyDatabaseAlias,
                 ["ID"] = taskGuid,
                 ["WorkingON"] = isWorking ? "1" : "0"
             },
@@ -145,7 +145,7 @@ public sealed class LegacyTaskStatusSource(
             "ChangeWorkSeq_mApp",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection,
+                ["_Conn"] = scope.LegacyDatabaseAlias,
                 ["ID"] = taskGuid,
                 ["Priority"] = priority.ToString(),
                 ["Branch_ID"] = scope.BranchId,
@@ -163,7 +163,7 @@ public sealed class LegacyTaskStatusSource(
             "Update_CR01_HotStatus",
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection,
+                ["_Conn"] = scope.LegacyDatabaseAlias,
                 ["oID"] = taskGuid
             },
             cancellationToken);

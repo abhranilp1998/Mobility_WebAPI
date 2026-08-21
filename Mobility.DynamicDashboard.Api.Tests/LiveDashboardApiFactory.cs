@@ -25,7 +25,6 @@ public sealed class LiveDashboardApiFactory : WebApplicationFactory<Program>
                     ["DashboardApi:CurrentOpp:Mode"] = "Live",
                     ["DashboardApi:CurrentOpp:Legacy:BaseUrl"] = "http://legacy.test",
                     ["DashboardApi:CurrentOpp:Legacy:TimeoutSeconds"] = "5",
-                    ["ConnectionStrings:anupalan"] = "anupalan-test-connection",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:CustomerId"] = "CUSTOMER-01",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:DefaultBranchId"] = "BR-01",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:DefaultFinancialYearId"] = "FY-2026",
@@ -165,7 +164,6 @@ public sealed class MissingLiveConfigurationDashboardApiFactory
                     ["DashboardApi:CurrentOpp:Mode"] = "Live",
                     ["DashboardApi:CurrentOpp:Legacy:BaseUrl"] = "",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:CustomerId"] = "CUSTOMER-01",
-                    ["DashboardApi:CurrentOpp:Tenants:development-user:LegacyConnection"] = "tenant-connection",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedBranchIds:0"] = "BR-01",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedFinancialYearIds:0"] = "FY-2026"
                 });

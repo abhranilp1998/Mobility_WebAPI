@@ -29,25 +29,16 @@ public sealed class CurrentOppLegacyOptions
     public string BaseUrl { get; set; } = string.Empty;
 
     public int TimeoutSeconds { get; set; } = 30;
-
-    /// <summary>
-    /// Names the server-side connection string passed to the approved legacy
-    /// source when a tenant does not provide an explicit authorized mapping.
-    /// Current Opp Development configuration intentionally uses anupalan.
-    /// </summary>
-    public string ConnectionStringName { get; set; } = "anupalan";
 }
 
 /// <summary>
 /// Maps an authenticated caller to one approved ERP customer and its allowed
-/// branch/financial-year scope. Legacy connection values belong here or in a
-/// secret-backed configuration provider, never in a request body.
+/// branch/financial-year scope. The legacy database alias is supplied by the
+/// signed-in Mobility app and is not stored in this tenant mapping.
 /// </summary>
 public sealed class CurrentOppTenantScopeOptions
 {
     public string CustomerId { get; set; } = string.Empty;
-
-    public string LegacyConnection { get; set; } = string.Empty;
 
     public string DefaultBranchId { get; set; } = string.Empty;
 
@@ -64,16 +55,17 @@ public sealed record CurrentOppScope(
     string BranchId,
     string FinancialYearId,
     Uri LegacyBaseUri,
-    string LegacyConnection);
+    string LegacyDatabaseAlias);
 
 /// <summary>
 /// Resolves and validates all values needed by the legacy call. The request
 /// supplies the selected branch/year only as a candidate; the allow-lists and
-/// customer/connection mapping remain server-owned authorization data.
+/// customer mapping remain server-owned authorization data. The database alias
+/// comes from the app request and is validated separately.
 /// </summary>
 public sealed class CurrentOppScopeResolver(
     IOptions<CurrentOppLiveOptions> options,
-    IConfiguration configuration)
+    ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider)
 {
     public CurrentOppScope Resolve(
         string callerId,
@@ -100,17 +92,15 @@ public sealed class CurrentOppScopeResolver(
         var customerId = string.IsNullOrWhiteSpace(tenant.CustomerId)
             ? normalizedCaller
             : tenant.CustomerId.Trim();
-        var connection = string.IsNullOrWhiteSpace(tenant.LegacyConnection)
-            ? configuration.GetConnectionString(settings.Legacy.ConnectionStringName)?.Trim()
-            : tenant.LegacyConnection.Trim();
-        connection ??= string.Empty;
-        if (customerId.Length == 0 || connection.Length == 0)
+        if (customerId.Length == 0)
         {
             throw Failure(
                 StatusCodes.Status503ServiceUnavailable,
                 "live_configuration_missing",
                 "The Current Opp live tenant mapping is incomplete.");
         }
+
+        var legacyDatabaseAlias = legacyDatabaseAliasProvider.GetRequiredAlias();
 
         if (string.IsNullOrWhiteSpace(settings.Legacy.BaseUrl))
         {
@@ -148,7 +138,7 @@ public sealed class CurrentOppScopeResolver(
             branchId,
             financialYearId,
             baseUri,
-            connection);
+            legacyDatabaseAlias);
     }
 
     private static string ResolveScopeValue(

@@ -93,7 +93,7 @@ public sealed class LegacyCurrentOppSource(
             endpoint,
             new Dictionary<string, string>
             {
-                ["_Conn"] = scope.LegacyConnection,
+                ["_Conn"] = scope.LegacyDatabaseAlias,
                 ["ClassName"] = ClassName,
                 ["FunctionName"] = functionName,
                 ["Parameter"] = parameter

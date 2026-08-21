@@ -15,15 +15,12 @@ public sealed class ConfigurationDiagnosticsTests
 {
     private const string CurrentOppTenant = "CLIENT-A-CALLER-ID";
     private const string TaskStatusTenant = "CLIENT-B-CALLER-ID";
-    private const string NamedConnection =
+    private const string IgnoredSqlConnection =
         "Server=sql.internal;Database=anupalan_live;" +
         "User ID=named-user;Password=NAMED-SECRET;TrustServerCertificate=True";
-    private const string TenantConnection =
-        "Server=tenant.internal;Database=tenant_live;" +
-        "User ID=tenant-user;Password=TENANT-SECRET;TrustServerCertificate=True";
 
     [Fact]
-    public void Snapshot_ReportsTenantOverrideAndNamedFallbackWithoutSecrets()
+    public void Snapshot_ReportsRequestHeaderAliasSourceWithoutSecrets()
     {
         var service = CreateService(Environments.Development);
 
@@ -32,33 +29,25 @@ public sealed class ConfigurationDiagnosticsTests
         var currentOpp = Assert.Single(
             snapshot.Dashboards,
             item => item.Dashboard == "CurrentOpp");
-        var currentOppTenant = Assert.Single(currentOpp.TenantConnections);
-        Assert.Equal("tenantLegacyConnection", currentOppTenant.EffectiveSource);
-        Assert.Equal("inMemory", currentOppTenant.ConfigurationProvider);
-        Assert.True(currentOppTenant.Configured);
-        Assert.StartsWith("sha256:", currentOppTenant.ConnectionFingerprint);
+        Assert.Equal(
+            "requestHeader:X-Legacy-Database",
+            currentOpp.LegacyDatabaseAliasSource);
+        Assert.StartsWith("sha256:", Assert.Single(currentOpp.TenantFingerprints));
 
         var taskStatus = Assert.Single(
             snapshot.Dashboards,
             item => item.Dashboard == "TaskStatus");
-        var taskStatusTenant = Assert.Single(taskStatus.TenantConnections);
-        Assert.Equal("namedConnection", taskStatusTenant.EffectiveSource);
-        Assert.Equal("inMemory", taskStatusTenant.ConfigurationProvider);
-        Assert.True(taskStatusTenant.Configured);
-        Assert.StartsWith("sha256:", taskStatusTenant.ConnectionFingerprint);
-        Assert.NotEqual(
-            currentOppTenant.ConnectionFingerprint,
-            taskStatusTenant.ConnectionFingerprint);
+        Assert.Equal(
+            "requestHeader:X-Legacy-Database",
+            taskStatus.LegacyDatabaseAliasSource);
+        Assert.StartsWith("sha256:", Assert.Single(taskStatus.TenantFingerprints));
 
         var json = JsonSerializer.Serialize(snapshot);
         Assert.DoesNotContain(CurrentOppTenant, json, StringComparison.Ordinal);
         Assert.DoesNotContain(TaskStatusTenant, json, StringComparison.Ordinal);
         Assert.DoesNotContain("NAMED-SECRET", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("TENANT-SECRET", json, StringComparison.Ordinal);
         Assert.DoesNotContain("named-user", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("tenant-user", json, StringComparison.Ordinal);
         Assert.DoesNotContain("sql.internal", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("tenant.internal", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -104,12 +93,10 @@ public sealed class ConfigurationDiagnosticsTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:anupalan"] = NamedConnection,
+                ["ConnectionStrings:anupalan"] = IgnoredSqlConnection,
                 ["DashboardApi:CurrentOpp:Mode"] = "Live",
                 [$"DashboardApi:CurrentOpp:Tenants:{CurrentOppTenant}:CustomerId"] =
                     "CUSTOMER-A",
-                [$"DashboardApi:CurrentOpp:Tenants:{CurrentOppTenant}:LegacyConnection"] =
-                    TenantConnection,
                 ["DashboardApi:TaskStatus:Mode"] = "Live",
                 [$"DashboardApi:TaskStatus:Tenants:{TaskStatusTenant}:CustomerId"] =
                     "CUSTOMER-B"

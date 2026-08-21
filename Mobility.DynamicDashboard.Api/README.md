@@ -311,12 +311,10 @@ also returns `404` to non-loopback callers. Its response contains only provider
 labels and SHA-256 fingerprints. It never returns a raw tenant ID, legacy URL,
 connection string, SQL username, or password.
 
-For each configured tenant, `effectiveSource` has one of these values:
-
-- `tenantLegacyConnection`: that tenant's non-empty `LegacyConnection` won.
-- `namedConnection`: the tenant override was empty, so
-  `ConnectionStrings:<connectionStringName>` won.
-- `missing`: neither source supplied a usable value.
+Each dashboard reports `legacyDatabaseAliasSource` as
+`requestHeader:X-Legacy-Database`. Tenant fingerprints remain one-way values;
+the runtime Appdata.Conn_ alias is never returned by diagnostics. A SQL
+connection string under `ConnectionStrings:*` is not an `_Conn` fallback.
 
 After copying a new publish folder, recycle the application pool before using
 this endpoint so the snapshot comes from the new worker process.
@@ -788,7 +786,6 @@ The equivalent environment configuration is:
 export DashboardApi__CurrentOpp__Mode=Live
 export DashboardApi__CurrentOpp__Legacy__BaseUrl='http://192.168.192.196:8087'
 export DashboardApi__CurrentOpp__Legacy__TimeoutSeconds=30
-export DashboardApi__CurrentOpp__Tenants__development-user__LegacyConnection='<approved-connection-alias>'
 export DashboardApi__CurrentOpp__Tenants__development-user__DefaultBranchId='<approved-branch-id>'
 export DashboardApi__CurrentOpp__Tenants__development-user__DefaultFinancialYearId='<approved-financial-year-id>'
 export DashboardApi__CurrentOpp__Tenants__development-user__AllowedBranchIds__0='<approved-branch-id>'
@@ -797,11 +794,11 @@ export DashboardApi__CurrentOpp__Tenants__development-user__AllowedFinancialYear
 
 When the login tenant ID is also the ERP customer ID, omit `CustomerId`; the
 resolver uses the authenticated subject. Configure `CustomerId` only as a
-server-side override when those IDs genuinely differ. `LegacyConnection` must
-come from an authorized tenant mapping or secret-backed provider. Do not put
-actual values in source control or the Flutter request. For multiple authorized
-branches/years, add `__1`, `__2`, and so on to the corresponding allow-list
-variables.
+server-side override when those IDs genuinely differ. Flutter sends its current
+`Appdata.Conn_` value in `X-Legacy-Database`; the API validates it as a short
+database alias and forwards it as the ASMX `_Conn` value. Never put a SQL
+connection string in that header. For multiple authorized branches/years, add
+`__1`, `__2`, and so on to the corresponding allow-list variables.
 
 Run the API in live mode:
 
@@ -880,8 +877,7 @@ Keep the base configuration safe:
       "Mode": "InMemory",
       "Legacy": {
         "BaseUrl": "",
-        "TimeoutSeconds": 30,
-        "ConnectionStringName": "anupalan"
+        "TimeoutSeconds": 30
       },
       "Tenants": {}
     }
@@ -896,7 +892,6 @@ enable Live mode:
 export DashboardApi__TaskStatus__Mode=Live
 export DashboardApi__TaskStatus__Legacy__BaseUrl='https://<approved-legacy-host>'
 export DashboardApi__TaskStatus__Legacy__TimeoutSeconds=30
-export DashboardApi__TaskStatus__Legacy__ConnectionStringName=anupalan
 export DashboardApi__TaskStatus__Tenants__<caller-id>__LoginUserId='<authorized-login-user-id>'
 export DashboardApi__TaskStatus__Tenants__<caller-id>__TaskUserId='<authorized-task-user-id>'
 export DashboardApi__TaskStatus__Tenants__<caller-id>__DefaultBranchId='<authorized-branch-id>'
@@ -908,21 +903,12 @@ export DashboardApi__TaskStatus__Tenants__<caller-id>__AllowedFinancialYearIds__
 Omit `CustomerId` when the authenticated login tenant is the ERP customer.
 Set it only as a protected server-side override when those identifiers differ.
 
-LegacyConnection can be set on a tenant when the tenant needs a dedicated
-server-side mapping. Otherwise the adapter reads the named connection string:
-
-~~~sh
-dotnet user-secrets set \
-  "ConnectionStrings:anupalan" \
-  "<server-side-legacy-connection>" \
-  --project Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj
-~~~
-
 The authenticated token subject (or X-Development-User in Development) is the
-caller-id lookup key. CustomerId, LoginUserId, TaskUserId, connection values,
-base URLs, branch IDs, and financial-year IDs are server-owned. Do not send or
-trust any of them from Flutter. When TaskUserId is empty, the server uses the
-configured customer ID and never an arbitrary request value. Add
+caller-id lookup key. CustomerId, LoginUserId, TaskUserId, base URLs, branch
+IDs, and financial-year IDs are server-owned. Flutter sends `Appdata.Conn_` as
+`X-Legacy-Database`; the API accepts only a short database alias and never a
+SQL connection string. When TaskUserId is empty, the server uses the configured
+customer ID and never an arbitrary request value. Add
 AllowedBranchIds__1, AllowedBranchIds__2, and matching financial-year entries
 for additional authorized scopes.
 
@@ -944,12 +930,12 @@ these allow-listed calls with resolved server values:
 
 | Purpose | Legacy call |
 |---|---|
-| Main task snapshot | GET {configuredLegacyBaseUrl}/service1.asmx/Get_taskStatus?_Conn={serverConnection}&LoginUserID={serverMappedLoginUserId}&TaskUserID={serverMappedTaskUserId} |
-| Admin lookup | GET {configuredLegacyBaseUrl}/service1.asmx/checkIfUserIsAdmin?_Conn={serverConnection}&UID={serverMappedLoginUserId} |
-| Supplementary attachment summary | GET {configuredLegacyBaseUrl}/service1.asmx/GetAttachmentSummary_AP?_Conn={serverConnection} |
-| Working status | GET {configuredLegacyBaseUrl}/service1.asmx/GN25_CurrentWorkOn_mApp?_Conn={serverConnection}&ID={taskGuid}&WorkingON=1\|0 |
-| Priority | GET {configuredLegacyBaseUrl}/service1.asmx/ChangeWorkSeq_mApp?_Conn={serverConnection}&ID={taskGuid}&Priority={1..5}&Branch_ID={authorizedBranchId}&FY_ID={authorizedFinancialYearId}&ReqBy_ID={authorizedCallerId} |
-| Optional CR01 hot status | GET {configuredLegacyBaseUrl}/service1.asmx/Update_CR01_HotStatus?_Conn={serverConnection}&oID={taskGuid} |
+| Main task snapshot | GET {configuredLegacyBaseUrl}/service1.asmx/Get_taskStatus?_Conn={appDatabaseAlias}&LoginUserID={serverMappedLoginUserId}&TaskUserID={serverMappedTaskUserId} |
+| Admin lookup | GET {configuredLegacyBaseUrl}/service1.asmx/checkIfUserIsAdmin?_Conn={appDatabaseAlias}&UID={serverMappedLoginUserId} |
+| Supplementary attachment summary | GET {configuredLegacyBaseUrl}/service1.asmx/GetAttachmentSummary_AP?_Conn={appDatabaseAlias} |
+| Working status | GET {configuredLegacyBaseUrl}/service1.asmx/GN25_CurrentWorkOn_mApp?_Conn={appDatabaseAlias}&ID={taskGuid}&WorkingON=1\|0 |
+| Priority | GET {configuredLegacyBaseUrl}/service1.asmx/ChangeWorkSeq_mApp?_Conn={appDatabaseAlias}&ID={taskGuid}&Priority={1..5}&Branch_ID={authorizedBranchId}&FY_ID={authorizedFinancialYearId}&ReqBy_ID={authorizedCallerId} |
+| Optional CR01 hot status | GET {configuredLegacyBaseUrl}/service1.asmx/Update_CR01_HotStatus?_Conn={appDatabaseAlias}&oID={taskGuid} |
 
 Get_taskStatus is called once per rows request. Its ASP.NET wrapped
 { "d": "[...]" } and direct array responses are both accepted. The snapshot
@@ -1030,8 +1016,11 @@ until the next authoritative snapshot.
 ### Task Status live error codes
 
 - task_status_live_configuration_missing: Live mode is enabled but the base
-  URL, connection mapping, tenant, or allow-list is incomplete.
+  URL, tenant, or allow-list is incomplete.
 - task_status_live_configuration_invalid: Server configuration is malformed.
+- legacy_database_alias_missing: The app did not send `X-Legacy-Database`.
+- legacy_database_alias_invalid: The supplied value is not a short database
+  alias; SQL connection strings are rejected.
 - task_status_live_scope_forbidden: The authenticated caller or requested
   branch/year is not authorized.
 - task_status_live_scope_required: A row/mutation request omitted an explicit
@@ -1085,8 +1074,7 @@ The checked-in base configuration keeps Work Done safe by default:
       "Mode": "InMemory",
       "Legacy": {
         "BaseUrl": "",
-        "TimeoutSeconds": 60,
-        "ConnectionStringName": "anupalan"
+        "TimeoutSeconds": 60
       },
       "Tenants": {}
     }
@@ -1095,14 +1083,12 @@ The checked-in base configuration keeps Work Done safe by default:
 ~~~
 
 Enable live mode only in the API process configuration. Use the authenticated
-caller subject as the tenant key and keep the connection value in User Secrets
-or the deployment secret store:
+caller subject as the tenant key:
 
 ~~~sh
 export DashboardApi__WorkDone__Mode=Live
 export DashboardApi__WorkDone__Legacy__BaseUrl='https://<approved-legacy-host>'
 export DashboardApi__WorkDone__Legacy__TimeoutSeconds=60
-export DashboardApi__WorkDone__Legacy__ConnectionStringName=anupalan
 export DashboardApi__WorkDone__Tenants__<caller-id>__DefaultBranchId='<authorized-branch-id>'
 export DashboardApi__WorkDone__Tenants__<caller-id>__DefaultFinancialYearId='<authorized-financial-year-id>'
 export DashboardApi__WorkDone__Tenants__<caller-id>__AllowedBranchIds__0='<authorized-branch-id>'
@@ -1112,18 +1098,19 @@ export DashboardApi__WorkDone__Tenants__<caller-id>__AllowedFinancialYearIds__0=
 Omit `CustomerId` when the authenticated login tenant is the ERP customer.
 Set it only as a protected server-side override when those identifiers differ.
 
-Alternatively, set a tenant-specific `LegacyConnection` value through the
-server-side configuration provider. Do not send `_Conn`, a legacy URL, or
-customer/connection values from Flutter. Branch and financial-year values in
-rows/action context are validated against the tenant allow-lists even though
-the legacy `WorkDoneRPF` signature itself only accepts its five filter values.
+Flutter sends `Appdata.Conn_` in `X-Legacy-Database`; the API validates that it
+is a short database alias, then forwards it as `_Conn`. It rejects SQL
+connection strings and does not accept a legacy URL from Flutter. Branch and
+financial-year values in rows/action context are validated against the tenant
+allow-lists even though the legacy `WorkDoneRPF` signature itself only accepts
+its five filter values.
 
 ### Legacy calls made by the server
 
 | Purpose | Legacy call |
 |---|---|
-| Main Work Done snapshot | `GET {configuredLegacyBaseUrl}/service1.asmx/WorkDoneRPF?_Conn={serverConnection}&FromDate={fromDate}&ToDate={toDate}&stage={stage}&AssignedBy={assignedBy}&client={client}` |
-| Supplementary attachment summary | `GET {configuredLegacyBaseUrl}/service1.asmx/GetAttachmentSummary_AP?_Conn={serverConnection}` |
+| Main Work Done snapshot | `GET {configuredLegacyBaseUrl}/service1.asmx/WorkDoneRPF?_Conn={appDatabaseAlias}&FromDate={fromDate}&ToDate={toDate}&stage={stage}&AssignedBy={assignedBy}&client={client}` |
+| Supplementary attachment summary | `GET {configuredLegacyBaseUrl}/service1.asmx/GetAttachmentSummary_AP?_Conn={appDatabaseAlias}` |
 
 The adapter always sends all five WorkDoneRPF keys, including empty values,
 because the ASMX endpoint treats a missing key differently from `key=`. The

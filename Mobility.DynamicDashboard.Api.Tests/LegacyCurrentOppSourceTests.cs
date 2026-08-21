@@ -35,7 +35,7 @@ public sealed class LegacyCurrentOppSourceTests
             "BR-01",
             "FY-2026",
             new Uri("http://legacy.test"),
-            "tenant-connection");
+            "tenant_test");
 
         var parents = await source.GetParentRowsAsync(scope, CancellationToken.None);
         var details = await source.GetDetailRowsAsync(
@@ -56,7 +56,7 @@ public sealed class LegacyCurrentOppSourceTests
             handler.Requests[0].Query["Parameter"]);
         Assert.Equal("Opportunitie_DetailList", handler.Requests[1].Query["FunctionName"]);
         Assert.Equal("AGENT-01", handler.Requests[1].Query["Parameter"]);
-        Assert.Equal("tenant-connection", handler.Requests[1].Query["_Conn"]);
+        Assert.Equal("tenant_test", handler.Requests[1].Query["_Conn"]);
     }
 
     private sealed class RecordingLegacyHandler : HttpMessageHandler

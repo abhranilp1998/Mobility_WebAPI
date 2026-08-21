@@ -275,6 +275,10 @@ builder.Services.AddSingleton<
     IDashboardTenantAccessService,
     DashboardTenantAccessService>();
 builder.Services.AddScoped<IDynamicDashboardService, DynamicDashboardService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<
+    ILegacyDatabaseAliasProvider,
+    HttpContextLegacyDatabaseAliasProvider>();
 builder.Services.AddSingleton<
     IConfigurationDiagnosticsService,
     ConfigurationDiagnosticsService>();

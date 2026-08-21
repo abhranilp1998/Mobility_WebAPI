@@ -37,7 +37,6 @@ public sealed class TaskStatusLiveApiFactory : WebApplicationFactory<Program>
                     ["DashboardApi:TaskStatus:Mode"] = "Live",
                     ["DashboardApi:TaskStatus:Legacy:BaseUrl"] = "http://legacy.test",
                     ["DashboardApi:TaskStatus:Legacy:TimeoutSeconds"] = "5",
-                    ["ConnectionStrings:anupalan"] = "task-status-test-connection",
                     ["DashboardApi:TaskStatus:Tenants:development-user:CustomerId"] = "CUSTOMER-01",
                     ["DashboardApi:TaskStatus:Tenants:development-user:LoginUserId"] = "LOGIN-01",
                     ["DashboardApi:TaskStatus:Tenants:development-user:TaskUserId"] = "TASK-OWNER-01",
