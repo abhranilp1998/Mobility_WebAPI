@@ -50,6 +50,46 @@ public sealed class LegacyWorkDoneSourceTests
         Assert.Equal("A-1", attachment.AttachmentId);
     }
 
+    [Theory]
+    [InlineData(
+        WorkDoneFilterOptionSource.Stage,
+        "/service1.asmx/GenericAPI_MApp",
+        "FunctionName=CSPL_LoadRCData")]
+    [InlineData(
+        WorkDoneFilterOptionSource.AssignedBy,
+        "/service1.asmx/WorkDoneRPF_WorkDoneBy",
+        "_Conn=server-connection")]
+    [InlineData(
+        WorkDoneFilterOptionSource.Client,
+        "/service1.asmx/WorkDoneRPF_Clients",
+        "_Conn=server-connection")]
+    public async Task FilterOptionsUseDedicatedLegacyOperations(
+        WorkDoneFilterOptionSource optionSource,
+        string expectedPath,
+        string expectedQuery)
+    {
+        Uri? requestedUri = null;
+        using var httpClient = new HttpClient(new StubHandler(request =>
+        {
+            requestedUri = request.RequestUri;
+            return "[{\"ID\":\"OPT-1\",\"Description\":\"Option One\",\"PopulationRef\":\"POP-1\"}]";
+        }));
+        var source = CreateSource(httpClient);
+
+        var options = await source.GetFilterOptionsAsync(
+            Scope(),
+            optionSource,
+            CancellationToken.None);
+
+        var option = Assert.Single(options);
+        Assert.Equal("OPT-1", option.Id);
+        Assert.Equal("Option One", option.Description);
+        Assert.Equal("POP-1", option.PopulationRef);
+        Assert.Equal(expectedPath, requestedUri!.AbsolutePath);
+        Assert.Contains(expectedQuery, requestedUri.Query);
+        Assert.DoesNotContain("WorkDoneRPF?", requestedUri.AbsoluteUri);
+    }
+
     private static LegacyWorkDoneSource CreateSource(HttpClient client) =>
         new(
             client,

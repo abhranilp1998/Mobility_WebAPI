@@ -54,11 +54,15 @@ public sealed class FakeLegacyWorkDoneSource : ILegacyWorkDoneSource
 {
     public int RowsCallCount { get; private set; }
 
+    public int FilterOptionsCallCount { get; private set; }
+
     public int AttachmentSummaryCallCount { get; private set; }
 
     public WorkDoneQuery? LastQuery { get; private set; }
 
     public WorkDoneScope? LastScope { get; private set; }
+
+    public WorkDoneFilterOptionSource? LastFilterOptionSource { get; private set; }
 
     public bool FailRows { get; set; }
 
@@ -95,9 +99,11 @@ public sealed class FakeLegacyWorkDoneSource : ILegacyWorkDoneSource
     public void Reset()
     {
         RowsCallCount = 0;
+        FilterOptionsCallCount = 0;
         AttachmentSummaryCallCount = 0;
         LastQuery = null;
         LastScope = null;
+        LastFilterOptionSource = null;
         FailRows = false;
         FailAttachments = false;
     }
@@ -121,6 +127,27 @@ public sealed class FakeLegacyWorkDoneSource : ILegacyWorkDoneSource
         }
 
         return Task.FromResult(Rows);
+    }
+
+    public Task<IReadOnlyList<LegacyWorkDoneFilterOption>> GetFilterOptionsAsync(
+        WorkDoneScope scope,
+        WorkDoneFilterOptionSource optionSource,
+        CancellationToken cancellationToken)
+    {
+        LastScope = scope;
+        LastFilterOptionSource = optionSource;
+        FilterOptionsCallCount++;
+        IReadOnlyList<LegacyWorkDoneFilterOption> options = optionSource switch
+        {
+            WorkDoneFilterOptionSource.Stage =>
+            [new("ST-1", "Analysis", "STAGE")],
+            WorkDoneFilterOptionSource.AssignedBy =>
+            [new("AB-1", "Alice", "STAFF")],
+            WorkDoneFilterOptionSource.Client =>
+            [new("CL-1", "Apex Motors", "CLIENT")],
+            _ => []
+        };
+        return Task.FromResult(options);
     }
 
     public Task<IReadOnlyList<WorkDoneAttachmentSummary>> GetAttachmentSummaryAsync(

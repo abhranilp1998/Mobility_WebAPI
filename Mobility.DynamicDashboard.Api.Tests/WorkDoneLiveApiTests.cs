@@ -74,6 +74,11 @@ public sealed class WorkDoneLiveApiTests(WorkDoneLiveApiFactory factory)
         using var optionsBody = await JsonDocument.ParseAsync(await optionsResponse.Content.ReadAsStreamAsync());
         Assert.Contains(optionsBody.RootElement.GetProperty("options").EnumerateArray(), option =>
             option.GetProperty("id").GetString() == "CL-1" && option.GetProperty("label").GetString() == "Apex Motors");
+        Assert.Equal(0, factory.Source.RowsCallCount);
+        Assert.Equal(1, factory.Source.FilterOptionsCallCount);
+        Assert.Equal(
+            WorkDoneFilterOptionSource.Client,
+            factory.Source.LastFilterOptionSource);
 
         using var attachmentRequest = new HttpRequestMessage(
             HttpMethod.Get,

@@ -15,6 +15,18 @@ public sealed record WorkDoneQuery(
 public sealed record LegacyWorkDoneRow(
     IReadOnlyDictionary<string, JsonElement> Values);
 
+public enum WorkDoneFilterOptionSource
+{
+    Stage,
+    AssignedBy,
+    Client
+}
+
+public sealed record LegacyWorkDoneFilterOption(
+    string Id,
+    string Description,
+    string? PopulationRef);
+
 public sealed record WorkDoneAttachmentSummary(
     string SourceType,
     string DocumentGuid,
@@ -35,6 +47,11 @@ public interface ILegacyWorkDoneSource
         WorkDoneQuery query,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<LegacyWorkDoneFilterOption>> GetFilterOptionsAsync(
+        WorkDoneScope scope,
+        WorkDoneFilterOptionSource optionSource,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<WorkDoneAttachmentSummary>> GetAttachmentSummaryAsync(
         WorkDoneScope scope,
         CancellationToken cancellationToken);
@@ -43,7 +60,9 @@ public interface ILegacyWorkDoneSource
 /// <summary>
 /// Thin allow-listed adapter for the CSPL legacy Work Done calls. The client
 /// cannot choose the URL, connection, class, or function; it can only select
-/// the five documented WorkDoneRPF filters after the API validates scope.
+/// the documented Work Done filters after the API validates scope. Filter
+/// options use the same dedicated ASMX operations as the established app so
+/// opening the renderer does not run the full WorkDoneRPF query three times.
 /// </summary>
 public sealed class LegacyWorkDoneSource(
     HttpClient httpClient,
@@ -72,6 +91,60 @@ public sealed class LegacyWorkDoneSource(
 
         return ParseObjectRows(json)
             .Select(values => new LegacyWorkDoneRow(values))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<LegacyWorkDoneFilterOption>>
+        GetFilterOptionsAsync(
+            WorkDoneScope scope,
+            WorkDoneFilterOptionSource optionSource,
+            CancellationToken cancellationToken)
+    {
+        var (relativePath, query) = optionSource switch
+        {
+            WorkDoneFilterOptionSource.Stage =>
+            (
+                "service1.asmx/GenericAPI_MApp",
+                (IReadOnlyDictionary<string, string>)new Dictionary<string, string>
+                {
+                    ["_Conn"] = scope.LegacyDatabaseAlias,
+                    ["ClassName"] = "CORAL_Generic_Udf_Api",
+                    ["FunctionName"] = "CSPL_LoadRCData",
+                    ["Parameter"] =
+                        "CTGGN270|~| and IsDeactivate = 0 and Description like '0%'"
+                }),
+            WorkDoneFilterOptionSource.AssignedBy =>
+            (
+                "service1.asmx/WorkDoneRPF_WorkDoneBy",
+                new Dictionary<string, string>
+                {
+                    ["_Conn"] = scope.LegacyDatabaseAlias
+                }),
+            WorkDoneFilterOptionSource.Client =>
+            (
+                "service1.asmx/WorkDoneRPF_Clients",
+                new Dictionary<string, string>
+                {
+                    ["_Conn"] = scope.LegacyDatabaseAlias
+                }),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(optionSource),
+                optionSource,
+                "Unknown Work Done filter option source.")
+        };
+
+        using var json = await GetJsonAsync(
+            scope,
+            relativePath,
+            query,
+            cancellationToken);
+
+        return ParseObjectRows(json)
+            .Select(values => new LegacyWorkDoneFilterOption(
+                StringValue(values, "ID", "Id", "id"),
+                StringValue(values, "Description", "description", "Label", "label"),
+                NullStringValue(values, "PopulationRef", "populationRef")))
+            .Where(option => option.Id.Length > 0 || option.Description.Length > 0)
             .ToList();
     }
 

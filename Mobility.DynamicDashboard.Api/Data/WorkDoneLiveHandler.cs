@@ -70,14 +70,14 @@ public sealed class WorkDoneLiveHandler(
         string? search,
         CancellationToken cancellationToken)
     {
-        var field = filterKey.Trim().ToLowerInvariant() switch
+        var optionSource = filterKey.Trim().ToLowerInvariant() switch
         {
-            "stage" => "stage",
-            "assignedby" or "workdoneby" => "assignedBy",
-            "client" => "client",
-            _ => null
+            "stage" => WorkDoneFilterOptionSource.Stage,
+            "assignedby" or "workdoneby" => WorkDoneFilterOptionSource.AssignedBy,
+            "client" => WorkDoneFilterOptionSource.Client,
+            _ => (WorkDoneFilterOptionSource?)null
         };
-        if (field is null)
+        if (optionSource is null)
         {
             throw new DashboardDataSourceException(
                 StatusCodes.Status404NotFound,
@@ -87,15 +87,16 @@ public sealed class WorkDoneLiveHandler(
         }
 
         var scope = scopeResolver.Resolve(callerId, null, true);
-        var rawRows = await source.GetRowsAsync(
+        var legacyOptions = await source.GetFilterOptionsAsync(
             scope,
-            new WorkDoneQuery(),
+            optionSource.Value,
             cancellationToken);
-        var rows = NormalizeRows(rawRows, scope, null);
-        var options = rows
-            .Select(row => OptionFor(row, field))
-            .Where(option => option is not null)
-            .Select(option => option!)
+        var options = legacyOptions
+            .Select(option => new DashboardFilterOption(
+                FirstNonEmpty(option.Id, option.Description),
+                FirstNonEmpty(option.Description, option.Id),
+                option.PopulationRef,
+                false))
             .GroupBy(option => option.Id, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .Where(option => string.IsNullOrWhiteSpace(search) ||
@@ -409,23 +410,6 @@ public sealed class WorkDoneLiveHandler(
             return leftDate.CompareTo(rightDate);
         }
         return string.Compare(leftValue, rightValue, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static DashboardFilterOption? OptionFor(
-        NormalizedDashboardRow row,
-        string field)
-    {
-        var (idField, labelField) = field switch
-        {
-            "stage" => ("stageId", "stage"),
-            "assignedBy" => ("assignedById", "assignedBy"),
-            _ => ("clientId", "client")
-        };
-        var label = ReadValue(row, labelField);
-        var id = FirstNonEmpty(ReadValue(row, idField), label);
-        return label.Length == 0 && id.Length == 0
-            ? null
-            : new DashboardFilterOption(id, FirstNonEmpty(label, id), null, false);
     }
 
     private static bool IsBlankOrIdOrEquals(
