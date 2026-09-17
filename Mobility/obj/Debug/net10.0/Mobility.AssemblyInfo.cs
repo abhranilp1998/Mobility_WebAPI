@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Mobility")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1c9c932dd266cc8a4be4a7b74ca11cba8dbc449b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+49c312a74fc0770a0301a3dd54fb3b100aa1975c")]
 [assembly: System.Reflection.AssemblyProductAttribute("Mobility")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Mobility")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

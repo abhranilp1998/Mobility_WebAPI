@@ -42,6 +42,23 @@ dotnet run --project Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api
 
 The HTTP development server runs at `http://localhost:5282`.
 
+### JetBrains Rider Hot Reload
+
+Use Rider's generated `Mobility.DynamicDashboard.Api: http` launch-settings
+configuration. Start it with Run or Debug from Rider rather than starting a
+separate `dotnet run` process. The `http` launch profile explicitly enables Hot
+Reload and continues to use `http://localhost:5282`.
+
+### VS Code / VS Code Insiders Hot Reload
+
+Open the repository root, select `DynamicDashboard API (Hot Reload)` in the
+Run and Debug panel, and start it with `F5`. The checked-in `.vscode` settings
+enable C# Dev Kit Hot Reload and apply supported C# edits on save.
+
+Keep both IDE configurations available, but start the API from only one IDE at
+a time. Rider and VS Code intentionally share `http://localhost:5282`, so
+running both launch configurations together would cause a port-in-use error.
+
 Useful local URLs:
 
 - Swagger UI: [http://localhost:5282/swagger](http://localhost:5282/swagger)
@@ -80,6 +97,11 @@ platform secret store or environment variables such as
 `ConnectionStrings__DefaultConnection`; do not commit plaintext credentials.
 
 ## Windows IIS publishing
+
+After publishing, follow
+[`POST_PUBLISH_CHECKLIST.md`](POST_PUBLISH_CHECKLIST.md) for the active
+ASP.NET Core environment, server-side legacy address, Flutter
+`DYNAMIC_DASHBOARD_API_BASE_URL`, application-pool recycle, and smoke tests.
 
 Select the committed `WindowsIIS` publish profile in Rider, or run:
 
@@ -734,8 +756,9 @@ Common status codes:
 
 `InMemoryDashboardRepository` contains demo definitions, rows, and attachment
 metadata so the Flutter renderer can demonstrate all four dashboard shapes.
-Current Opp, Task Status, and Work Done have explicit server-side Live adapters. Their
-`Live` mode never falls back to demo rows.
+Opportunity Follow-Up, Current Opp All Followups, Task Status, and Work Done
+have explicit server-side Live adapters. Their `Live` mode never falls back to
+demo rows.
 
 Before production use:
 
@@ -750,15 +773,18 @@ Before production use:
 6. Keep the Flutter renderer definition-driven so new definitions do not need
    dashboard-specific parsing logic.
 
-## Current Opp live POC mode
+## Opportunity follow-up live POC mode
 
-Current Opp supports two explicit server modes:
+The two opportunity follow-up dashboards use the same scope schema but have
+separate server-owned configuration sections and support two explicit modes:
 
 - `InMemory`: the reviewed two-row demo fallback, suitable only for local
   renderer work.
-- `Live`: the server calls the approved legacy `service1.asmx` parent/detail
-  flow and never falls back to demo rows if configuration or VPN reachability
-  is missing.
+- `Live`: `Opportunity Follow-Up` uses the approved `Opportunitie_List`
+  parent/detail flow; `Current Opp All Followups` uses the distinct
+  `Opportunitie_Mgt_List` / `Opportunitie_Mgt_DetailList` management flow.
+  Neither falls back to demo rows if configuration or VPN reachability is
+  missing.
 
 The checked-in base JSON keeps `InMemory` as the safe default. The
 Development JSON currently contains a temporary, demo-only mapping for the
@@ -790,6 +816,13 @@ export DashboardApi__CurrentOpp__Tenants__development-user__DefaultBranchId='<ap
 export DashboardApi__CurrentOpp__Tenants__development-user__DefaultFinancialYearId='<approved-financial-year-id>'
 export DashboardApi__CurrentOpp__Tenants__development-user__AllowedBranchIds__0='<approved-branch-id>'
 export DashboardApi__CurrentOpp__Tenants__development-user__AllowedFinancialYearIds__0='<approved-financial-year-id>'
+export DashboardApi__OpportunityFollowUp__Mode=Live
+export DashboardApi__OpportunityFollowUp__Legacy__BaseUrl='http://192.168.192.196:8087'
+export DashboardApi__OpportunityFollowUp__Legacy__TimeoutSeconds=30
+export DashboardApi__OpportunityFollowUp__Tenants__development-user__DefaultBranchId='<approved-branch-id>'
+export DashboardApi__OpportunityFollowUp__Tenants__development-user__DefaultFinancialYearId='<approved-financial-year-id>'
+export DashboardApi__OpportunityFollowUp__Tenants__development-user__AllowedBranchIds__0='<approved-branch-id>'
+export DashboardApi__OpportunityFollowUp__Tenants__development-user__AllowedFinancialYearIds__0='<approved-financial-year-id>'
 ```
 
 When the login tenant ID is also the ERP customer ID, omit `CustomerId`; the
@@ -1051,10 +1084,11 @@ access. The Task Status definition also temporarily accepts Flutter's old
 `207e1ece_3160_48db_8889_aed47f07439c` screen ID and returns the canonical
 `8a4c3fcc_839b_490a_b303_a81f11a34a65` definition.
 
-Opportunity Follow-Up remains on the explicit in-memory compatibility path.
-Current Opp, Task Status, and Work Done use live handlers when their individual
-`DashboardApi:<Dashboard>:Mode` is `Live`; each live handler fails closed and
-never silently returns the demo rows.
+Opportunity Follow-Up uses `DashboardApi:OpportunityFollowUp`; Current Opp All
+Followups retains `DashboardApi:CurrentOpp` for compatibility. Both sections
+currently authorize the same tenant but can evolve independently. Task Status
+and Work Done retain their individual live modes. Every live handler fails
+closed and never silently returns demo rows.
 
 ## Work Done live mode
 
@@ -1167,8 +1201,19 @@ the same VPN-connected machine before opening Flutter.
 
 - Routes: `Mobility.DynamicDashboard.Api/Controllers/DashboardsController.cs`
 - DTOs: `Mobility.DynamicDashboard.Api/Models/DashboardDtos.cs`
-- Demo definitions and rows: `Mobility.DynamicDashboard.Api/Data/InMemoryDashboardRepository.cs`
-- Current Opp live configuration and legacy adapter: `Mobility.DynamicDashboard.Api/Data/CurrentOppLiveConfiguration.cs`, `Mobility.DynamicDashboard.Api/Data/LegacyCurrentOppSource.cs`, and `Mobility.DynamicDashboard.Api/Data/CurrentOppLiveHandler.cs`
-- Task Status live configuration, source, and handler: `Mobility.DynamicDashboard.Api/Data/TaskStatusLiveConfiguration.cs`, `Mobility.DynamicDashboard.Api/Data/LegacyTaskStatusSource.cs`, and `Mobility.DynamicDashboard.Api/Data/TaskStatusLiveHandler.cs`
+- Repository contracts, configured routing, demo definitions, and rows:
+  `Mobility.DynamicDashboard.Api/Data/Repositories/`
+- Shared legacy request context, including the database-alias provider:
+  `Mobility.DynamicDashboard.Api/Data/Legacy/`
+- Opportunity Follow-Up entry handler and legacy source:
+  `Mobility.DynamicDashboard.Api/Data/OpportunityFollowUp/`
+- Current Opp All Followups entry handler and legacy source:
+  `Mobility.DynamicDashboard.Api/Data/CurrentOppAllFollowups/`
+- Shared follow-up scope, transport, normalization, and source contracts:
+  `Mobility.DynamicDashboard.Api/Data/FollowUps/`
+- Task Status live configuration, legacy source, and handler:
+  `Mobility.DynamicDashboard.Api/Data/TaskStatus/`
+- Work Done live configuration, legacy source, and handler:
+  `Mobility.DynamicDashboard.Api/Data/WorkDone/`
 - Validation and actions: `Mobility.DynamicDashboard.Api/Services/DynamicDashboardService.cs`
 - Contract review package: `../contracts/operational-dashboards/`

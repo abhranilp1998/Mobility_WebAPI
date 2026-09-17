@@ -4,13 +4,13 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.FollowUps;
 
 namespace Mobility.DynamicDashboard.Api.Tests;
 
 public sealed class LiveDashboardApiFactory : WebApplicationFactory<Program>
 {
-    public FakeLegacyCurrentOppSource Source { get; } =
+    public FakeLegacyFollowUpSource Source { get; } =
         new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -29,21 +29,33 @@ public sealed class LiveDashboardApiFactory : WebApplicationFactory<Program>
                     ["DashboardApi:CurrentOpp:Tenants:development-user:DefaultBranchId"] = "BR-01",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:DefaultFinancialYearId"] = "FY-2026",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedBranchIds:0"] = "BR-01",
-                    ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedFinancialYearIds:0"] = "FY-2026"
+                    ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedFinancialYearIds:0"] = "FY-2026",
+                    ["DashboardApi:OpportunityFollowUp:Mode"] = "Live",
+                    ["DashboardApi:OpportunityFollowUp:Legacy:BaseUrl"] = "http://legacy.test",
+                    ["DashboardApi:OpportunityFollowUp:Legacy:TimeoutSeconds"] = "5",
+                    ["DashboardApi:OpportunityFollowUp:Tenants:development-user:CustomerId"] = "CUSTOMER-01",
+                    ["DashboardApi:OpportunityFollowUp:Tenants:development-user:DefaultBranchId"] = "BR-01",
+                    ["DashboardApi:OpportunityFollowUp:Tenants:development-user:DefaultFinancialYearId"] = "FY-2026",
+                    ["DashboardApi:OpportunityFollowUp:Tenants:development-user:AllowedBranchIds:0"] = "BR-01",
+                    ["DashboardApi:OpportunityFollowUp:Tenants:development-user:AllowedFinancialYearIds:0"] = "FY-2026"
                 });
         });
         builder.ConfigureTestServices(services =>
         {
-            services.RemoveAll<ILegacyCurrentOppSource>();
-            services.AddSingleton<ILegacyCurrentOppSource>(Source);
+            services.RemoveAll<ILegacyOpportunityFollowUpSource>();
+            services.RemoveAll<ILegacyCurrentOppAllFollowupsSource>();
+            services.AddSingleton<ILegacyOpportunityFollowUpSource>(
+                new FakeCurrentFollowUpSource(Source));
+            services.AddSingleton<ILegacyCurrentOppAllFollowupsSource>(
+                new FakeAllFollowUpsSource(Source));
         });
     }
 }
 
-public sealed class FakeLegacyCurrentOppSource : ILegacyCurrentOppSource
+public sealed class FakeLegacyFollowUpSource
 {
-    private readonly IReadOnlyDictionary<string, IReadOnlyList<LegacyCurrentOppRow>>
-        _details = new Dictionary<string, IReadOnlyList<LegacyCurrentOppRow>>(
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<LegacyFollowUpRow>>
+        _details = new Dictionary<string, IReadOnlyList<LegacyFollowUpRow>>(
             StringComparer.OrdinalIgnoreCase)
         {
             ["AGENT-01"] =
@@ -99,19 +111,21 @@ public sealed class FakeLegacyCurrentOppSource : ILegacyCurrentOppSource
             ]
         };
 
-    public CurrentOppScope? LastScope { get; private set; }
+    public FollowUpScope? LastScope { get; private set; }
 
-    public int ParentCallCount { get; private set; }
+    public int CurrentFollowUpCallCount { get; private set; }
+
+    public int AllFollowUpCallCount { get; private set; }
 
     public int DetailCallCount { get; private set; }
 
-    public Task<IReadOnlyList<LegacyCurrentOppRow>> GetParentRowsAsync(
-        CurrentOppScope scope,
+    public Task<IReadOnlyList<LegacyFollowUpRow>> GetCurrentFollowUpRowsAsync(
+        FollowUpScope scope,
         CancellationToken cancellationToken)
     {
         LastScope = scope;
-        ParentCallCount++;
-        return Task.FromResult<IReadOnlyList<LegacyCurrentOppRow>>(
+        CurrentFollowUpCallCount++;
+        return Task.FromResult<IReadOnlyList<LegacyFollowUpRow>>(
         [
             new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -134,19 +148,82 @@ public sealed class FakeLegacyCurrentOppSource : ILegacyCurrentOppSource
         ]);
     }
 
-    public Task<IReadOnlyList<LegacyCurrentOppRow>> GetDetailRowsAsync(
-        CurrentOppScope scope,
+    public Task<IReadOnlyList<LegacyFollowUpRow>> GetAllFollowUpRowsAsync(
+        FollowUpScope scope,
+        CancellationToken cancellationToken)
+    {
+        LastScope = scope;
+        AllFollowUpCallCount++;
+        return Task.FromResult<IReadOnlyList<LegacyFollowUpRow>>(
+        [
+            new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ID"] = "AGENT-01",
+                ["Destination"] = "BR-01|AGENT-01",
+                ["Line1"] = "Seller One|Negotiation",
+                ["Line2"] = "live-doc-01",
+                ["NxtPg_Body"] =
+                    "ClassName=Generic_Udf_API&FunctionName=Opportunitie_Mgt_DetailList"
+            }),
+            new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ID"] = "AGENT-02",
+                ["Destination"] = "BR-01|AGENT-02",
+                ["Line1"] = "Seller Three|Proposal",
+                ["Line2"] = "live-doc-03",
+                ["NxtPg_Body"] =
+                    "ClassName=Generic_Udf_API&FunctionName=Opportunitie_Mgt_DetailList"
+            })
+        ]);
+    }
+
+    public Task<IReadOnlyList<LegacyFollowUpRow>> GetDetailRowsAsync(
+        FollowUpScope scope,
         string detailBody,
         string parameter,
         CancellationToken cancellationToken)
     {
         LastScope = scope;
         DetailCallCount++;
+        var detailKey = parameter.Split('|', StringSplitOptions.RemoveEmptyEntries)
+            .LastOrDefault()?.Trim() ?? parameter;
         return Task.FromResult(
-            _details.TryGetValue(parameter, out var rows)
+            _details.TryGetValue(detailKey, out var rows)
                 ? rows
-                : Array.Empty<LegacyCurrentOppRow>());
+                : Array.Empty<LegacyFollowUpRow>());
     }
+}
+
+public sealed class FakeCurrentFollowUpSource(FakeLegacyFollowUpSource source)
+    : ILegacyOpportunityFollowUpSource
+{
+    public Task<IReadOnlyList<LegacyFollowUpRow>> GetRootRowsAsync(
+        FollowUpScope scope,
+        CancellationToken cancellationToken) =>
+        source.GetCurrentFollowUpRowsAsync(scope, cancellationToken);
+
+    public Task<IReadOnlyList<LegacyFollowUpRow>> GetDetailRowsAsync(
+        FollowUpScope scope,
+        string detailBody,
+        string parameter,
+        CancellationToken cancellationToken) =>
+        source.GetDetailRowsAsync(scope, detailBody, parameter, cancellationToken);
+}
+
+public sealed class FakeAllFollowUpsSource(FakeLegacyFollowUpSource source)
+    : ILegacyCurrentOppAllFollowupsSource
+{
+    public Task<IReadOnlyList<LegacyFollowUpRow>> GetRootRowsAsync(
+        FollowUpScope scope,
+        CancellationToken cancellationToken) =>
+        source.GetAllFollowUpRowsAsync(scope, cancellationToken);
+
+    public Task<IReadOnlyList<LegacyFollowUpRow>> GetDetailRowsAsync(
+        FollowUpScope scope,
+        string detailBody,
+        string parameter,
+        CancellationToken cancellationToken) =>
+        source.GetDetailRowsAsync(scope, detailBody, parameter, cancellationToken);
 }
 
 public sealed class MissingLiveConfigurationDashboardApiFactory
@@ -165,7 +242,8 @@ public sealed class MissingLiveConfigurationDashboardApiFactory
                     ["DashboardApi:CurrentOpp:Legacy:BaseUrl"] = "",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:CustomerId"] = "CUSTOMER-01",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedBranchIds:0"] = "BR-01",
-                    ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedFinancialYearIds:0"] = "FY-2026"
+                    ["DashboardApi:CurrentOpp:Tenants:development-user:AllowedFinancialYearIds:0"] = "FY-2026",
+                    ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory"
                 });
         });
     }

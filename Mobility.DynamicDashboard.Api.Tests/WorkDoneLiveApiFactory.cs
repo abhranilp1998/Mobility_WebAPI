@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.WorkDone;
 using Xunit;
 
 namespace Mobility.DynamicDashboard.Api.Tests;
@@ -30,6 +30,7 @@ public sealed class WorkDoneLiveApiFactory : WebApplicationFactory<Program>
             {
                 ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                 ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
+                ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory",
                 ["DashboardApi:TaskStatus:Mode"] = "InMemory",
                 ["DashboardApi:WorkDone:Mode"] = "Live",
                 ["DashboardApi:WorkDone:Legacy:BaseUrl"] = "http://legacy.test",

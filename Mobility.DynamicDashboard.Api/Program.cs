@@ -4,7 +4,13 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using System.Text.Json.Serialization;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.CurrentOppAllFollowups;
+using Mobility.DynamicDashboard.Api.Data.FollowUps;
+using Mobility.DynamicDashboard.Api.Data.Legacy;
+using Mobility.DynamicDashboard.Api.Data.OpportunityFollowUp;
+using Mobility.DynamicDashboard.Api.Data.Repositories;
+using Mobility.DynamicDashboard.Api.Data.TaskStatus;
+using Mobility.DynamicDashboard.Api.Data.WorkDone;
 using Mobility.DynamicDashboard.Api.Infrastructure;
 using Mobility.DynamicDashboard.Api.Services;
 
@@ -283,13 +289,22 @@ builder.Services.AddSingleton<
     IConfigurationDiagnosticsService,
     ConfigurationDiagnosticsService>();
 builder.Services
-    .AddOptions<CurrentOppLiveOptions>()
+    .AddOptions<CurrentOppAllFollowupsLiveOptions>()
     .Bind(builder.Configuration.GetSection("DashboardApi:CurrentOpp"));
-builder.Services.AddHttpClient<LegacyCurrentOppSource>();
-builder.Services.AddSingleton<CurrentOppScopeResolver>();
-builder.Services.AddSingleton<ILegacyCurrentOppSource>(serviceProvider =>
-    serviceProvider.GetRequiredService<LegacyCurrentOppSource>());
-builder.Services.AddSingleton<CurrentOppLiveHandler>();
+builder.Services
+    .AddOptions<OpportunityFollowUpLiveOptions>()
+    .Bind(builder.Configuration.GetSection("DashboardApi:OpportunityFollowUp"));
+builder.Services.AddHttpClient<LegacyFollowUpApiClient>();
+builder.Services.AddSingleton<FollowUpScopeResolver>();
+builder.Services.AddSingleton<LegacyOpportunityFollowUpSource>();
+builder.Services.AddSingleton<ILegacyOpportunityFollowUpSource>(serviceProvider =>
+    serviceProvider.GetRequiredService<LegacyOpportunityFollowUpSource>());
+builder.Services.AddSingleton<LegacyCurrentOppAllFollowupsSource>();
+builder.Services.AddSingleton<ILegacyCurrentOppAllFollowupsSource>(serviceProvider =>
+    serviceProvider.GetRequiredService<LegacyCurrentOppAllFollowupsSource>());
+builder.Services.AddSingleton<FollowUpLiveHandler>();
+builder.Services.AddSingleton<OpportunityFollowUpLiveHandler>();
+builder.Services.AddSingleton<CurrentOppAllFollowupsLiveHandler>();
 builder.Services
     .AddOptions<TaskStatusLiveOptions>()
     .Bind(builder.Configuration.GetSection("DashboardApi:TaskStatus"));

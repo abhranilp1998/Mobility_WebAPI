@@ -5,7 +5,10 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.FollowUps;
+using Mobility.DynamicDashboard.Api.Data.Legacy;
+using Mobility.DynamicDashboard.Api.Data.TaskStatus;
+using Mobility.DynamicDashboard.Api.Data.WorkDone;
 using Mobility.DynamicDashboard.Api.Services;
 using Xunit;
 
@@ -168,13 +171,13 @@ public sealed class DashboardTenantAccessTests(
     [Fact]
     public void CurrentOppScope_DefaultsCustomerIdToLoginTenant()
     {
-        var options = Options.Create(new CurrentOppLiveOptions
+        var options = Options.Create(new FollowUpLiveOptions
         {
-            Legacy = new CurrentOppLegacyOptions
+            Legacy = new FollowUpLegacyOptions
             {
                 BaseUrl = "https://legacy.invalid/"
             },
-            Tenants = new Dictionary<string, CurrentOppTenantScopeOptions>(
+            Tenants = new Dictionary<string, FollowUpTenantScopeOptions>(
                 StringComparer.OrdinalIgnoreCase)
             {
                 [TenantA] = new()
@@ -186,11 +189,11 @@ public sealed class DashboardTenantAccessTests(
                 }
             }
         });
-        var resolver = new CurrentOppScopeResolver(
-            options,
+        var resolver = new FollowUpScopeResolver(
             new FixedLegacyDatabaseAliasProvider());
 
         var scope = resolver.Resolve(
+            options.Value,
             TenantA,
             context: null,
             useConfiguredDefaults: true);
@@ -393,6 +396,7 @@ public sealed class TenantAccessApiFactory : WebApplicationFactory<Program>
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] =
                         "true",
                     ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
+                    ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory",
                     ["DashboardApi:TaskStatus:Mode"] = "InMemory",
                     ["DashboardApi:WorkDone:Mode"] = "InMemory",
                     ["DashboardApi:TenantAccess:Enforced"] = "true",

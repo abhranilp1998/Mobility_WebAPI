@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.Legacy;
 using Mobility.DynamicDashboard.Api.Services;
 using Xunit;
 

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.TaskStatus;
 using Mobility.DynamicDashboard.Api.Services;
 using Xunit;
 
@@ -34,6 +34,7 @@ public sealed class TaskStatusLiveApiFactory : WebApplicationFactory<Program>
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
+                    ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory",
                     ["DashboardApi:TaskStatus:Mode"] = "Live",
                     ["DashboardApi:TaskStatus:Legacy:BaseUrl"] = "http://legacy.test",
                     ["DashboardApi:TaskStatus:Legacy:TimeoutSeconds"] = "5",
@@ -291,6 +292,7 @@ public sealed class MissingTaskStatusLiveConfigurationApiFactory
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
+                    ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory",
                     ["DashboardApi:TaskStatus:Mode"] = "Live",
                     ["DashboardApi:TaskStatus:Legacy:BaseUrl"] = "",
                     ["DashboardApi:TaskStatus:Tenants:development-user:CustomerId"] = "CUSTOMER-01",

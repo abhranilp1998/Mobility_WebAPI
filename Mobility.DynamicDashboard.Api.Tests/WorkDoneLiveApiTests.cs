@@ -1,7 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.Legacy;
+using Mobility.DynamicDashboard.Api.Data.WorkDone;
 using Xunit;
 
 namespace Mobility.DynamicDashboard.Api.Tests;

@@ -430,3 +430,6 @@
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/obj/Debug/net10.0/Mobility.DynamicDashboard.Api.Tests.pdb
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/obj/Debug/net10.0/Mobility.DynamicDashboard.Api.Tests.genruntimeconfig.cache
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/obj/Debug/net10.0/ref/Mobility.DynamicDashboard.Api.Tests.dll
+/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/appsettings.Production.json
+/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/web.config
+/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/appsettings.Server.json

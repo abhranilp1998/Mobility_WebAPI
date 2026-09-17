@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.Repositories;
 using Mobility.DynamicDashboard.Api.Models;
 
 namespace Mobility.DynamicDashboard.Api.Services;

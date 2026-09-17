@@ -34,6 +34,13 @@ public sealed class ConfigurationDiagnosticsTests
             currentOpp.LegacyDatabaseAliasSource);
         Assert.StartsWith("sha256:", Assert.Single(currentOpp.TenantFingerprints));
 
+        var opportunityFollowUp = Assert.Single(
+            snapshot.Dashboards,
+            item => item.Dashboard == "OpportunityFollowUp");
+        Assert.Equal(
+            currentOpp.TenantFingerprints,
+            opportunityFollowUp.TenantFingerprints);
+
         var taskStatus = Assert.Single(
             snapshot.Dashboards,
             item => item.Dashboard == "TaskStatus");
@@ -96,6 +103,9 @@ public sealed class ConfigurationDiagnosticsTests
                 ["ConnectionStrings:anupalan"] = IgnoredSqlConnection,
                 ["DashboardApi:CurrentOpp:Mode"] = "Live",
                 [$"DashboardApi:CurrentOpp:Tenants:{CurrentOppTenant}:CustomerId"] =
+                    "CUSTOMER-A",
+                ["DashboardApi:OpportunityFollowUp:Mode"] = "Live",
+                [$"DashboardApi:OpportunityFollowUp:Tenants:{CurrentOppTenant}:CustomerId"] =
                     "CUSTOMER-A",
                 ["DashboardApi:TaskStatus:Mode"] = "Live",
                 [$"DashboardApi:TaskStatus:Tenants:{TaskStatusTenant}:CustomerId"] =

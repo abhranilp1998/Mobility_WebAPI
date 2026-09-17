@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.Legacy;
 using Xunit;
 
 namespace Mobility.DynamicDashboard.Api.Tests;
@@ -19,6 +19,7 @@ public sealed class LiveDashboardApiTests(
     [Fact]
     public async Task LiveRows_ReturnSourceRowsAndNormalizedContract()
     {
+        var detailCallsBefore = factory.Source.DetailCallCount;
         using var response = await PostRowsAsync(
             new { customer = "", salesPerson = "", agent = "", search = "" },
             pageNumber: 1,
@@ -55,6 +56,28 @@ public sealed class LiveDashboardApiTests(
         Assert.Contains(
             row.GetProperty("commands").EnumerateArray(),
             command => command.GetProperty("actionCode").GetString() == "OPEN_OPPORTUNITY");
+        Assert.Equal(detailCallsBefore + 2, factory.Source.DetailCallCount);
+    }
+
+    [Fact]
+    public async Task CurrentFollowUpDashboard_UsesCurrentParentDetailFlow()
+    {
+        var currentCallsBefore = factory.Source.CurrentFollowUpCallCount;
+        var detailCallsBefore = factory.Source.DetailCallCount;
+
+        using var response = await PostRowsAsync(
+            new { customer = "", salesPerson = "", agent = "", search = "" },
+            pageNumber: 1,
+            pageSize: 50,
+            dashboardCode: "CSPL_OPPORTUNITY_FOLLOW_UP");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = await ReadJsonAsync(response);
+        Assert.Equal(3, body.RootElement.GetProperty("totalCount").GetInt32());
+        Assert.Equal(
+            currentCallsBefore + 1,
+            factory.Source.CurrentFollowUpCallCount);
+        Assert.Equal(detailCallsBefore + 2, factory.Source.DetailCallCount);
     }
 
     [Fact]
@@ -112,7 +135,7 @@ public sealed class LiveDashboardApiTests(
     [Fact]
     public async Task LiveRows_RejectUnauthorizedBranchWithoutCallingSource()
     {
-        var before = factory.Source.ParentCallCount;
+        var before = factory.Source.AllFollowUpCallCount;
         using var response = await PostRowsAsync(
             new { customer = "", salesPerson = "", agent = "", search = "" },
             pageNumber: 1,
@@ -122,7 +145,7 @@ public sealed class LiveDashboardApiTests(
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using var body = await ReadJsonAsync(response);
         Assert.Equal("live_scope_forbidden", body.RootElement.GetProperty("code").GetString());
-        Assert.Equal(before, factory.Source.ParentCallCount);
+        Assert.Equal(before, factory.Source.AllFollowUpCallCount);
     }
 
     [Fact]
@@ -144,16 +167,34 @@ public sealed class LiveDashboardApiTests(
             option => option.GetProperty("label").GetString() == "Live Customer Two");
     }
 
+    [Fact]
+    public async Task CurrentFollowUpFilterOptions_ReturnCurrentDashboardCode()
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            "/api/v1/dashboards/CSPL_OPPORTUNITY_FOLLOW_UP/filters/customer/options");
+        request.Headers.Add("X-Dashboard-Definition-Version", DefinitionVersion);
+
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = await ReadJsonAsync(response);
+        Assert.Equal(
+            "CSPL_OPPORTUNITY_FOLLOW_UP",
+            body.RootElement.GetProperty("dashboardCode").GetString());
+    }
+
     private async Task<HttpResponseMessage> PostRowsAsync(
         object filters,
         int pageNumber,
         int pageSize,
         string branchId = "BR-01",
-        object[]? sort = null)
+        object[]? sort = null,
+        string dashboardCode = DashboardCode)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
-            $"/api/v1/dashboards/{DashboardCode}/rows")
+            $"/api/v1/dashboards/{dashboardCode}/rows")
         {
             Content = JsonContent.Create(new
             {

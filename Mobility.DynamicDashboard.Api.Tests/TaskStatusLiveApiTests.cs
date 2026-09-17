@@ -4,7 +4,8 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.Legacy;
+using Mobility.DynamicDashboard.Api.Data.TaskStatus;
 using Mobility.DynamicDashboard.Api.Services;
 using Xunit;
 

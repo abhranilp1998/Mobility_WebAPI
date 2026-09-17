@@ -86,3 +86,6 @@
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/obj/Debug/net10.0/Mobility.E1AE3620.Up2Date
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/obj/Debug/net10.0/Mobility.DynamicDashboard.Api.genruntimeconfig.cache
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/obj/Debug/net10.0/ref/Mobility.DynamicDashboard.Api.dll
+/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/bin/Debug/net10.0/appsettings.Production.json
+/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/bin/Debug/net10.0/web.config
+/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api/bin/Debug/net10.0/appsettings.Server.json

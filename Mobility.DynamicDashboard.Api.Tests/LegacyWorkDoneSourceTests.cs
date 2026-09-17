@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.WorkDone;
 using Xunit;
 
 namespace Mobility.DynamicDashboard.Api.Tests;

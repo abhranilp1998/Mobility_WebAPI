@@ -20,6 +20,7 @@ public sealed class DashboardApiFactory : WebApplicationFactory<Program>
                     // Keep contract/in-memory tests independent of the
                     // temporary Development live-demo tenant configuration.
                     ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
+                    ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory",
                     ["DashboardApi:TaskStatus:Mode"] = "InMemory",
                     ["DashboardApi:WorkDone:Mode"] = "InMemory"
                 });

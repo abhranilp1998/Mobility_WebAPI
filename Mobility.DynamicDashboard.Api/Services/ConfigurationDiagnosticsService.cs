@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using Mobility.DynamicDashboard.Api.Data;
+using Mobility.DynamicDashboard.Api.Data.Legacy;
 
 namespace Mobility.DynamicDashboard.Api.Services;
 
@@ -47,7 +47,7 @@ public sealed class ConfigurationDiagnosticsService(
     : IConfigurationDiagnosticsService
 {
     private static readonly string[] DashboardNames =
-        ["CurrentOpp", "TaskStatus", "WorkDone"];
+        ["CurrentOpp", "OpportunityFollowUp", "TaskStatus", "WorkDone"];
 
     public ConfigurationDiagnosticsResponse CreateSnapshot()
     {
