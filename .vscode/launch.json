@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "DynamicDashboard API (Hot Reload)",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api.csproj"
+    }
+  ]
+}
