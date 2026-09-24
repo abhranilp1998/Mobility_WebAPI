@@ -6,7 +6,8 @@ namespace Mobility.DynamicDashboard.Api.Services;
 
 public sealed class DynamicDashboardService(
     IDashboardRepository repository,
-    IDashboardTenantAccessService tenantAccess)
+    IDashboardTenantAccessService tenantAccess,
+    DashboardViewResolver views)
     : IDynamicDashboardService
 {
     public async Task<DashboardServiceResult<DashboardCatalogResponse>>
@@ -54,8 +55,21 @@ public sealed class DynamicDashboardService(
             return TenantAccessUnavailable<DashboardCatalogResponse>();
         }
 
-        var catalog = evaluatedDefinitions
-            .Where(item => item.Access.Allowed)
+        var visible = new List<(DashboardDefinitionResponse Definition,
+            DashboardTenantAccessDecision Access)>();
+        foreach (var item in evaluatedDefinitions.Where(item => item.Access.Allowed))
+        {
+            try
+            {
+                visible.Add((views.Select(tenantId, item.Definition), item.Access));
+            }
+            catch (DashboardViewException failure)
+            {
+                return ViewFailure<DashboardCatalogResponse>(failure);
+            }
+        }
+
+        var catalog = visible
             .Where(item => rendererVersion >=
                 item.Definition.MinRendererVersion)
             .Where(item => item.Definition.RequiredCapabilities.All(
@@ -125,6 +139,15 @@ public sealed class DynamicDashboardService(
             return TenantAccessFailure<DashboardDefinitionResponse>(access);
         }
 
+        try
+        {
+            definition = views.Select(tenantId, definition);
+        }
+        catch (DashboardViewException failure)
+        {
+            return ViewFailure<DashboardDefinitionResponse>(failure);
+        }
+
         if (rendererVersion < definition.MinRendererVersion)
         {
             return Incompatible(
@@ -175,6 +198,15 @@ public sealed class DynamicDashboardService(
         if (!access.Allowed)
         {
             return TenantAccessFailure<DashboardRowsResponse>(access);
+        }
+
+        try
+        {
+            definition = views.Select(callerId, definition);
+        }
+        catch (DashboardViewException failure)
+        {
+            return ViewFailure<DashboardRowsResponse>(failure);
         }
 
         if (!definitionVersion.Equals(
@@ -304,12 +336,29 @@ public sealed class DynamicDashboardService(
             return TenantAccessFailure<DashboardFilterOptionsResponse>(access);
         }
 
+        try
+        {
+            definition = views.Select(callerId, definition);
+        }
+        catch (DashboardViewException failure)
+        {
+            return ViewFailure<DashboardFilterOptionsResponse>(failure);
+        }
+
         if (!definitionVersion.Equals(
                 definition.DefinitionVersion,
                 StringComparison.Ordinal))
         {
             return DefinitionChanged<DashboardFilterOptionsResponse>(
                 definition.DefinitionVersion);
+        }
+
+        if (!definition.Definition.Filters.Any(item =>
+                item.Key.Equals(filterKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            return NotFound<DashboardFilterOptionsResponse>(
+                "filter_option_source_not_found",
+                "The filter is not available in this dashboard view.");
         }
 
         if (search?.Length > 100)
@@ -347,7 +396,7 @@ public sealed class DynamicDashboardService(
                 "filter_option_source_not_found",
                 "The filter key is not registered in the option-source whitelist.")
             : DashboardServiceResult<DashboardFilterOptionsResponse>.Success(
-                response);
+                response with { DefinitionVersion = definition.DefinitionVersion });
     }
 
     public async Task<DashboardServiceResult<DashboardActionResponse>>
@@ -376,21 +425,38 @@ public sealed class DynamicDashboardService(
                 "The action is not registered for this dashboard.");
         }
 
-        if (!definitionVersion.Equals(
-                registration.DefinitionVersion,
-                StringComparison.Ordinal))
-        {
-            return DefinitionChanged<DashboardActionResponse>(
-                registration.DefinitionVersion);
-        }
-
         var definition = await repository.GetDefinitionAsync(
             registration.DashboardCode,
             cancellationToken);
-        var actionDefinition = definition?.Definition.Actions.SingleOrDefault(
+        if (definition is null)
+        {
+            return NotFound<DashboardActionResponse>(
+                "dashboard_not_found", "No handler is registered for this dashboard.");
+        }
+        try
+        {
+            definition = views.Select(callerId, definition);
+        }
+        catch (DashboardViewException failure)
+        {
+            return ViewFailure<DashboardActionResponse>(failure);
+        }
+        if (!definitionVersion.Equals(
+                definition.DefinitionVersion,
+                StringComparison.Ordinal))
+        {
+            return DefinitionChanged<DashboardActionResponse>(
+                definition.DefinitionVersion);
+        }
+        var actionDefinition = definition.Definition.Actions.SingleOrDefault(
             item => item.ActionCode.Equals(
                 registration.ActionCode,
                 StringComparison.OrdinalIgnoreCase));
+        if (actionDefinition is null)
+        {
+            return NotFound<DashboardActionResponse>(
+                "action_not_found", "The action is not available in this dashboard view.");
+        }
 
         var callerFailure = ValidateCaller<DashboardActionResponse>(
             callerId,
@@ -547,6 +613,15 @@ public sealed class DynamicDashboardService(
         if (!access.Allowed)
         {
             return TenantAccessFailure<DashboardAttachmentsResponse>(access);
+        }
+
+        try
+        {
+            views.ValidateCompany();
+        }
+        catch (DashboardViewException failure)
+        {
+            return ViewFailure<DashboardAttachmentsResponse>(failure);
         }
 
         if (string.IsNullOrWhiteSpace(documentGuid))
@@ -752,6 +827,16 @@ public sealed class DynamicDashboardService(
         decision.Failure == DashboardTenantAccessFailure.ConfigurationInvalid
             ? TenantAccessUnavailable<T>()
             : TenantForbidden<T>();
+
+    private static DashboardServiceResult<T> ViewFailure<T>(
+        DashboardViewException failure) =>
+        DashboardServiceResult<T>.Failure(
+            failure.StatusCode,
+            failure.Code,
+            failure.StatusCode == StatusCodes.Status400BadRequest
+                ? "Dashboard company context is invalid."
+                : "Dashboard view configuration is unavailable.",
+            failure.Message);
 
     private static DashboardServiceResult<T> FromSourceFailure<T>(
         DashboardDataSourceException failure) =>

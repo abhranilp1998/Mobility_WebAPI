@@ -22,6 +22,7 @@ public sealed class LiveDashboardApiFactory : WebApplicationFactory<Program>
                 new Dictionary<string, string?>
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
+                    ["DashboardApi:Views:Enabled"] = "false",
                     ["DashboardApi:CurrentOpp:Mode"] = "Live",
                     ["DashboardApi:CurrentOpp:Legacy:BaseUrl"] = "http://legacy.test",
                     ["DashboardApi:CurrentOpp:Legacy:TimeoutSeconds"] = "5",
@@ -238,6 +239,7 @@ public sealed class MissingLiveConfigurationDashboardApiFactory
                 new Dictionary<string, string?>
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
+                    ["DashboardApi:Views:Enabled"] = "false",
                     ["DashboardApi:CurrentOpp:Mode"] = "Live",
                     ["DashboardApi:CurrentOpp:Legacy:BaseUrl"] = "",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:CustomerId"] = "CUSTOMER-01",

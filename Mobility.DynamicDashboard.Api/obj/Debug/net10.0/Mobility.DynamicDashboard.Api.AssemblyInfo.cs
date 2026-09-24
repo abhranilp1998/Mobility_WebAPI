@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Mobility.DynamicDashboard.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+49c312a74fc0770a0301a3dd54fb3b100aa1975c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6900c78d36f03c8797b4aa948cd912310f879d49")]
 [assembly: System.Reflection.AssemblyProductAttribute("Mobility.DynamicDashboard.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Mobility.DynamicDashboard.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

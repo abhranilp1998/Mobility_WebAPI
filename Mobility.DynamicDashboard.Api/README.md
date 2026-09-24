@@ -535,11 +535,110 @@ Response shape:
 |---|---|---|
 | Current Opp All Followups | `customer`, `salesPerson`, `agent`, `search` | `customerName`, `stageLabel`, `followUpDate`, `salesPersonName`, `agentName` |
 | Opportunity Follow-Up | `customer`, `salesPerson`, `agent`, `search` | `customerName`, `stageLabel`, `followUpDate`, `salesPersonName`, `agentName` |
-| Task Status | `customer`, `classification`, `stage`, `search` | `priority`, `followupDate`, `stageName`, `clientName`, `agentName` |
+| Task Status | `customer`, `classification`, `search` | `priority`, `followupDate`, `stageName`, `clientName`, `agentName` |
 | Work Done | `stage`, `assignedBy`, `client`, `search` | `workDate`, `assignedTo`, `assignedBy`, `client`, `stage` |
 
 The search fields are also declared by each definition. The API searches only
 those declared fields.
+
+### Grouping field names
+
+The compiled default `definition.grouping.field` is in
+`Data/Repositories/InMemoryDashboardRepository.cs`. A client-specific view can
+override it through `DashboardApi:Views:Profiles` using a key in that
+dashboard's normalized `row.values`. Grouping is part of the definition; the
+rows request does not accept a `groupBy` parameter. These are the relevant row
+keys for switching the single group level:
+
+| Dashboard code | Current group | Stage | Person / agent | Other useful keys |
+|---|---|---|---|---|
+| `CSPL_CURRENT_OPP_ALL_FOLLOWUPS` | `stageLabel` | `stageLabel` | `salesPersonName`, `agentName` | `customerName`, `docNo` |
+| `CSPL_OPPORTUNITY_FOLLOW_UP` | `agentName` | `stageLabel` | `salesPersonName`, `agentName` | `customerName`, `docNo` |
+| `CSPL_TASK_STATUS` | `stageName` | `stageName`, `currentStage`, `stageTag` | `agentName`, `salesPersonName`, `developer`, `projectManager`, `assignorName` | `clientName`, `classificationName`, `priority` |
+| `CSPL_WORK_DONE` | `assignedTo` | `stage`, `currentStage` | `assignedTo`, `assignedBy` | `client`, `sourceType`, `status` |
+
+For All Followups, group by stage with `stageLabel` or by salesperson with
+`salesPersonName`. A filter key such as `salesPerson` is not a row field; it
+maps to `salesPersonName`. Update the grouping label and empty-value label
+alongside the field. The renderer reads the selected key from `row.values`.
+
+### Company and user dashboard views
+
+`DashboardApi:Views` selects a presentation profile independently for each
+dashboard code. The client key is the app's `Appdata.Conn_` value, sent in
+`X-Legacy-Database`; the user key is the authenticated dashboard subject
+(`Customer_ID` in the current Mobility login flow). Resolution order is user
+assignment, client assignment, then the compiled default definition. Every
+user of a configured client inherits its client view unless a user override
+exists. Omit an assignment to keep the default view. Existing caller-specific
+dashboard grants and live data scopes still apply to every request.
+
+The Development configuration assigns `anpl_master` the All Followups Agent
+profile (`agentName`) with the Customer, Agent, and Search filters, and
+`anupalan_live` the Salesperson profile (`salesPersonName`). A Doc No profile
+(`docNo`) is defined but not assigned. No legacy database is read merely to
+select a view.
+
+Configuration shape (identifiers are examples):
+
+```json
+{
+  "DashboardApi": {
+    "Views": {
+      "Enabled": true,
+      "Profiles": {
+        "salesperson-view": {
+          "DashboardCode": "CSPL_CURRENT_OPP_ALL_FOLLOWUPS",
+          "DefinitionVersion": "1.0.1",
+          "Grouping": {
+            "Field": "salesPersonName",
+            "Label": "Salesperson",
+            "EmptyValue": "Unassigned Salesperson"
+          }
+        }
+      },
+      "CompanyAssignments": {
+        "<Appdata.Conn_>": {
+          "CSPL_CURRENT_OPP_ALL_FOLLOWUPS": "salesperson-view"
+        }
+      },
+      "UserAssignments": {
+        "<Appdata.Conn_>": {
+          "<Customer_ID>": {
+            "CSPL_CURRENT_OPP_ALL_FOLLOWUPS": "salesperson-view"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Profiles may also set `Title`, `Layout` (`groupedCardList` or `cardList`),
+`FilterKeys`, `SummaryCodes`, `CardFieldCodes`, and `CardTitleField`. The three
+lists select and order elements already declared by that dashboard's compiled
+definition. A grouping or card title must use a normalized row key for the
+same dashboard. Profiles cannot register new data sources, filters, actions,
+widgets, or navigation behavior. Give each changed profile a new semantic
+`DefinitionVersion`; catalog, definition, rows, and filter-option responses
+then agree on the selected version. Invalid profiles or assignments fail
+validation and make `/health/ready` unhealthy.
+
+After the API version containing this resolver is deployed, `Views` uses
+`IOptionsMonitor` and reloads from configuration. Development uses
+`appsettings.Development.json`; production can use the protected
+`appsettings.Server.json` loaded with `reloadOnChange`. Publish a valid config
+change, then reopen or refresh the dashboard in the app. A supported view
+change needs no API or Flutter rebuild. A new renderer feature still does.
+
+The API validates the `X-Legacy-Database` alias syntax, then uses that value
+to select the client presentation. The app obtains `Appdata.Conn_` during
+login, but this header is not independently verified as the caller's company
+by this feature. A view assignment does not grant dashboard or live-data
+access. Binding the login's company identity to the authenticated API caller
+is separate security work, especially because the legacy data source also
+uses this alias. New callers still need the existing dashboard grants and
+live follow-up scopes.
 
 ## 4. Load filter options
 

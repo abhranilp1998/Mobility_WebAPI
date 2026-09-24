@@ -16,6 +16,7 @@ public sealed class DashboardApiFactory : WebApplicationFactory<Program>
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] =
                         "true",
+                    ["DashboardApi:Views:Enabled"] = "false",
                     ["DashboardApi:TenantAccess:Enforced"] = "false",
                     // Keep contract/in-memory tests independent of the
                     // temporary Development live-demo tenant configuration.

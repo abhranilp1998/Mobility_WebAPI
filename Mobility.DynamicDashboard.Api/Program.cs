@@ -81,6 +81,9 @@ builder.Services
     .AddHealthChecks()
     .AddCheck<DashboardTenantAccessHealthCheck>(
         "dashboard_tenant_access",
+        tags: ["ready"])
+    .AddCheck<DashboardViewHealthCheck>(
+        "dashboard_views",
         tags: ["ready"]);
 builder.Services.AddOpenApi("v1", options =>
 {
@@ -280,6 +283,14 @@ builder.Services.AddSingleton<
 builder.Services.AddSingleton<
     IDashboardTenantAccessService,
     DashboardTenantAccessService>();
+builder.Services
+    .AddOptions<DashboardViewOptions>()
+    .Bind(builder.Configuration.GetSection("DashboardApi:Views"))
+    .ValidateOnStart();
+builder.Services.AddSingleton<
+    IValidateOptions<DashboardViewOptions>,
+    DashboardViewOptionsValidator>();
+builder.Services.AddSingleton<DashboardViewResolver>();
 builder.Services.AddScoped<IDynamicDashboardService, DynamicDashboardService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<
