@@ -34,12 +34,14 @@ selected environment actually loads:
 - `DashboardApi:OpportunityFollowUp:Legacy:BaseUrl`
 - `DashboardApi:TaskStatus:Legacy:BaseUrl`
 - `DashboardApi:WorkDone:Legacy:BaseUrl`
-- each live section's `Legacy:ConnectionStringName`
-- every tenant's customer, branch, financial-year, and allowed-scope values
+- `DashboardApi:TenantAccess:ClientDatabases` and each dashboard's `AllowedClients`
+- the SQL connection string names used by `ClientDatabases`
+- optional per-user scope overrides under each live section's `Tenants`
 
 `CurrentOpp` is the configuration section for **Current Opp All Followups**.
 `OpportunityFollowUp` is the separate section for **Opportunity Follow-Up**.
-Keep both tenant entries when both tiles must be available.
+In Client mode, add each client database name to each dashboard's
+`AllowedClients` list. A per-user `Tenants` entry is optional.
 
 The legacy ASMX address is server-owned. Use the address reachable from the
 IIS machine, for example:
@@ -54,6 +56,11 @@ Dynamic Dashboard base URL.
 Keep database credentials only in the ignored `appsettings.Server.json` (or a
 server environment/secret provider). The publish target requires and copies
 that file. Never commit its real connection string.
+
+Before serving a client, verify that its registered SQL connection can read
+`CTGGN010` in that client database. The API queries `CTGGN010.ID` for the
+dashboard caller; an absent row returns 403. The selected branch and financial
+year are sent by the app in dashboard headers and request context.
 
 ## 3. Set the Flutter Dashboard API address
 

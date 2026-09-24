@@ -72,7 +72,8 @@ public sealed record FollowUpScope(
 /// comes from the app request and is validated separately.
 /// </summary>
 public sealed class FollowUpScopeResolver(
-    ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider)
+    ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider,
+    ClientDashboardScopeSelection? clientScope = null)
 {
     public FollowUpScope Resolve(
         FollowUpLiveOptions settings,
@@ -85,7 +86,8 @@ public sealed class FollowUpScopeResolver(
             item.Key.Equals(normalizedCaller, StringComparison.OrdinalIgnoreCase))
             .Value;
 
-        if (tenant is null)
+        var clientMode = clientScope?.Enabled == true;
+        if (tenant is null && !clientMode)
         {
             throw Failure(
                 StatusCodes.Status403Forbidden,
@@ -96,7 +98,7 @@ public sealed class FollowUpScopeResolver(
         // The login subject is the tenant/customer identity by default. An
         // explicit value remains supported for legacy installations where the
         // authenticated subject and ERP customer identifier differ.
-        var customerId = string.IsNullOrWhiteSpace(tenant.CustomerId)
+        var customerId = string.IsNullOrWhiteSpace(tenant?.CustomerId)
             ? normalizedCaller
             : tenant.CustomerId.Trim();
         if (customerId.Length == 0)
@@ -127,17 +129,19 @@ public sealed class FollowUpScopeResolver(
         }
 
         var branchId = ResolveScopeValue(
-            context?.BranchId,
-            tenant.DefaultBranchId,
-            tenant.AllowedBranchIds,
+            clientMode ? clientScope!.BranchId(context) : context?.BranchId,
+            tenant?.DefaultBranchId ?? string.Empty,
+            tenant?.AllowedBranchIds ?? [],
             "branchId",
-            useConfiguredDefaults);
+            useConfiguredDefaults,
+            clientMode);
         var financialYearId = ResolveScopeValue(
-            context?.FinancialYearId,
-            tenant.DefaultFinancialYearId,
-            tenant.AllowedFinancialYearIds,
+            clientMode ? clientScope!.FinancialYearId(context) : context?.FinancialYearId,
+            tenant?.DefaultFinancialYearId ?? string.Empty,
+            tenant?.AllowedFinancialYearIds ?? [],
             "financialYearId",
-            useConfiguredDefaults);
+            useConfiguredDefaults,
+            clientMode);
 
         return new FollowUpScope(
             normalizedCaller,
@@ -154,7 +158,8 @@ public sealed class FollowUpScopeResolver(
         string configuredDefault,
         IReadOnlyList<string> allowedValues,
         string fieldName,
-        bool useConfiguredDefaults)
+        bool useConfiguredDefaults,
+        bool allowUnrestricted)
     {
         var allowed = allowedValues
             .Select(value => value.Trim())
@@ -181,6 +186,7 @@ public sealed class FollowUpScopeResolver(
 
         if (allowed.Count == 0)
         {
+            if (allowUnrestricted) return value;
             throw Failure(
                 StatusCodes.Status503ServiceUnavailable,
                 "live_configuration_missing",

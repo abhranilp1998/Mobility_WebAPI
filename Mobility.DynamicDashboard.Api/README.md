@@ -188,10 +188,9 @@ Authorization: Bearer <access-token>
 The API does not invent production issuer, audience, tenant, secret, or
 identity configuration.
 
-## Tenant-controlled dashboard catalog
+## Client-controlled dashboard catalog
 
-The authenticated login subject is the current tenant. Clients should load the
-tenant-filtered catalog before requesting individual definitions:
+Clients should load the filtered catalog before requesting individual definitions:
 
 ```http
 GET /api/v1/dashboards/catalog?platform=android&rendererVersion=1&capability=groupedCardList
@@ -215,27 +214,34 @@ Existing deployments remain compatible while `Enforced` is `false`:
 }
 ```
 
-Prepare the full mapping first, then enable enforcement in server-owned
-configuration. Once enabled, a missing definition entry or disabled entry
-denies access. An enabled dashboard with an empty or duplicate tenant list is
-invalid configuration and prevents startup instead of silently exposing or
-hiding the wrong dashboard:
+In `Client` mode, configure each database alias once and list the clients
+allowed to see each dashboard. The API checks `CTGGN010.ID` for the dashboard
+caller in the selected database before returning the catalog or serving a
+dashboard. No per-user `Tenants` entry is required. The database name must be
+registered in `ClientDatabases`, and the caller ID is a SQL parameter.
+
+For the active Development environment, the shape is:
 
 ```json
 {
   "DashboardApi": {
     "TenantAccess": {
       "Enforced": true,
+      "Mode": "Client",
+      "ClientDatabases": {
+        "anupalan_live": "anupalan",
+        "anpl_master": "anpl"
+      },
       "Dashboards": {
         "CSPL_CURRENT_OPP_ALL_FOLLOWUPS": {
           "Enabled": true,
           "DisplayOrder": 10,
-          "AllowedTenants": ["<login-tenant-a>", "<login-tenant-b>"]
+          "AllowedClients": ["anupalan_live", "anpl_master"]
         },
         "CSPL_TASK_STATUS": {
           "Enabled": false,
           "DisplayOrder": 20,
-          "AllowedTenants": []
+          "AllowedClients": []
         }
       }
     }
@@ -243,42 +249,44 @@ hiding the wrong dashboard:
 }
 ```
 
-The policy uses stable dashboard codes, not screen aliases or titles, and is
-read through reloadable options. This lets an administrator change access and
-ordering in the server configuration without rebuilding Flutter or the API.
-Always keep real tenant IDs in protected deployment configuration rather than
-checked-in JSON.
+`ClientDatabases` maps an `Appdata.Conn_` alias to a server-owned connection
+string name. The API uses that connection's server and credentials but changes
+its SQL database to the registered alias. Confirm that the connection can read
+`CTGGN010` in every registered database. Keep credentials in the protected
+`appsettings.Server.json`. Client grants and ordering use reloadable options,
+so they can change without a rebuild.
 
-Enforced mappings are validated for non-empty, unique tenant grants and valid
-display order. `/health` remains the compatibility-safe liveness probe;
-`/health/ready` reports healthy only when tenant enforcement is enabled and its
-configuration is valid. An invalid policy reload fails closed with
+`Mode: "User"` retains the original `AllowedTenants` behavior. In Client mode,
+optional `DashboardApi:<Dashboard>:Tenants` entries may still override IDs or
+restrict branch and financial year for a specific user. Without an entry, the
+caller ID supplies the user IDs and the branch/year chosen in the app is passed
+through. Flutter sends that selection in request context and in
+`X-Dashboard-Branch-Id` and `X-Dashboard-Financial-Year-Id` headers for GET
+requests.
+
+Enforced mappings are validated for non-empty, unique grants and valid display
+order. `/health/ready` checks configuration, but does not run a SQL membership
+lookup; verify both pilot clients against the running API. An invalid policy
+reload fails closed with
 `dashboard_tenant_configuration_invalid` instead of exposing a dashboard.
 
 ### Safe production rollout
 
 Use this sequence so the existing single-customer deployment remains working:
 
-1. Leave `TenantAccess:Enforced` set to `false`.
-2. Add every known login tenant to each dashboard it is allowed to use. A
-   tenant can be present in one, several, or all dashboard lists.
-3. Add the matching server-side live scope under
-   `DashboardApi:<Dashboard>:Tenants:<login-tenant>`. Omit `CustomerId` when
-   the login tenant is already the ERP customer ID; keep it only as a legacy
-   override when the two identifiers genuinely differ.
-4. Verify each tenant's branch, financial-year, connection, and legacy source
-   mapping from the API server. Never send these values from Flutter.
-5. Set `Enforced` to `true`, then require both `/health` and `/health/ready` to
-   return `200` before putting the worker into service.
-6. Call `/api/v1/dashboards/catalog` as each pilot tenant and confirm the exact
-   dashboard set and order before expanding the rollout.
+1. Register each client alias in `ClientDatabases` with its server connection
+   name, and confirm read access to that database's `CTGGN010`.
+2. Add the alias to `AllowedClients` for each dashboard that client can use.
+3. Set `Mode` to `Client` and `Enforced` to `true`. Add a per-user `Tenants`
+   entry only where an override or narrower branch/year scope is needed.
+4. Confirm `/health/ready` returns `200`, then call the catalog and a live
+   filter endpoint as two users of one client and one user of another.
+5. Check that each client receives its assigned view and only its granted
+   dashboards before expanding the rollout.
 
-The access options reload from the protected server JSON, so an administrator
-can add or remove a grant without rebuilding. Replace the JSON atomically and
-recheck `/health/ready`; do not leave a partially written file for the watcher
-to read. Setting `Enforced` back to `false` is the compatibility rollback and
-restores the pre-allowlist behavior without changing definitions or live scope
-mappings.
+The access options reload from JSON. Replace the JSON atomically and recheck
+`/health/ready`; a running worker must reload the changed file. A new code
+capability still needs a release.
 
 ## Recommended client flow
 
@@ -571,13 +579,12 @@ dashboard code. The client key is the app's `Appdata.Conn_` value, sent in
 assignment, client assignment, then the compiled default definition. Every
 user of a configured client inherits its client view unless a user override
 exists. Omit an assignment to keep the default view. Existing caller-specific
-dashboard grants and live data scopes still apply to every request.
+client grants and membership checks still apply to every request.
 
-The Development configuration assigns `anpl_master` the All Followups Agent
-profile (`agentName`) with the Customer, Agent, and Search filters, and
-`anupalan_live` the Salesperson profile (`salesPersonName`). A Doc No profile
-(`docNo`) is defined but not assigned. No legacy database is read merely to
-select a view.
+The Development configuration assigns `anpl_master` the All Followups
+Salesperson profile (`salesPersonName`) with the Agent and Search filters, and
+`anupalan_live` the Stage profile (`stageLabel`). No legacy database is read
+merely to select a view.
 
 Configuration shape (identifiers are examples):
 
@@ -632,13 +639,10 @@ change, then reopen or refresh the dashboard in the app. A supported view
 change needs no API or Flutter rebuild. A new renderer feature still does.
 
 The API validates the `X-Legacy-Database` alias syntax, then uses that value
-to select the client presentation. The app obtains `Appdata.Conn_` during
-login, but this header is not independently verified as the caller's company
-by this feature. A view assignment does not grant dashboard or live-data
-access. Binding the login's company identity to the authenticated API caller
-is separate security work, especially because the legacy data source also
-uses this alias. New callers still need the existing dashboard grants and
-live follow-up scopes.
+to select the client presentation. A view assignment does not grant dashboard
+or live-data access. The client grant and `CTGGN010.ID` check authorize the
+dashboard. The database check confirms that the supplied caller ID exists in
+the selected database; it does not bind that ID to a separate login token.
 
 ## 4. Load filter options
 

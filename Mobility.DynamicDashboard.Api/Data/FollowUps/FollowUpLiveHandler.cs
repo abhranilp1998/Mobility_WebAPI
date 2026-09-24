@@ -272,7 +272,7 @@ public sealed class FollowUpLiveHandler(FollowUpScopeResolver scopeResolver)
             SalesPersonFromLine3(line3, stage),
             SalesPersonFromParent(parentLine1));
         var agentName = FirstNonEmpty(
-            CleanPerson(Read(detail, "Agent_Name", "AgentName")),
+            CleanAgentName(Read(detail, "Agent_Name", "AgentName")),
             parent?.AgentName ?? string.Empty,
             "Unassigned Agent");
         var actionPlan = FirstNonEmpty(
@@ -377,9 +377,9 @@ public sealed class FollowUpLiveHandler(FollowUpScopeResolver scopeResolver)
 
     private static string AgentNameFromParent(LegacyFollowUpRow parent) =>
         FirstNonEmpty(
-            PersonFromParentValue(Read(parent, "Line1")),
-            PersonFromParentValue(Read(parent, "Line2")),
-            PersonFromParentValue(Read(parent, "NxtPg_lbl")),
+            CleanAgentName(PersonFromParentValue(Read(parent, "Line1"))),
+            CleanAgentName(PersonFromParentValue(Read(parent, "Line2"))),
+            CleanAgentName(PersonFromParentValue(Read(parent, "NxtPg_lbl"))),
             "Unassigned Agent");
 
     private static string PersonFromParentValue(string value)
@@ -609,6 +609,21 @@ public sealed class FollowUpLiveHandler(FollowUpScopeResolver scopeResolver)
 
     private static string CleanPerson(string value) =>
         value.Split('|').FirstOrDefault()?.Trim() ?? string.Empty;
+
+    private static string CleanAgentName(string value)
+    {
+        var name = CleanPerson(value);
+        while (true)
+        {
+            var colon = name.IndexOf(':');
+            if (colon < 0 || !name[..colon].Trim().Equals("Agent", StringComparison.OrdinalIgnoreCase))
+            {
+                return name;
+            }
+
+            name = name[(colon + 1)..].TrimStart();
+        }
+    }
 
     private static string CleanLine(string value) =>
         value.Replace("|~|", " | ", StringComparison.Ordinal).Trim();

@@ -34,6 +34,7 @@ public sealed class TaskStatusLiveApiFactory : WebApplicationFactory<Program>
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
+                    ["DashboardApi:TenantAccess:Enforced"] = "false",
                     ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
                     ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory",
                     ["DashboardApi:TaskStatus:Mode"] = "Live",
@@ -293,6 +294,7 @@ public sealed class MissingTaskStatusLiveConfigurationApiFactory
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
+                    ["DashboardApi:TenantAccess:Enforced"] = "false",
                     ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
                     ["DashboardApi:OpportunityFollowUp:Mode"] = "InMemory",
                     ["DashboardApi:TaskStatus:Mode"] = "Live",

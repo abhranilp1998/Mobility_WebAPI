@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 
 namespace Mobility.DynamicDashboard.Api.Services;
 
@@ -33,13 +34,17 @@ public sealed class DashboardTenantAccessHealthCheck(
 
             var enabledDashboards = settings.Dashboards.Count(item =>
                 item.Value?.Enabled == true);
-            var tenantGrants = settings.Dashboards
+            var clientMode = string.Equals(settings.Mode,
+                "Client", StringComparison.OrdinalIgnoreCase);
+            var grants = settings.Dashboards
                 .Where(item => item.Value?.Enabled == true)
-                .Sum(item => item.Value?.AllowedTenants?.Count(value =>
+                .Sum(item => (clientMode
+                    ? item.Value?.AllowedClients
+                    : item.Value?.AllowedTenants)?.Count(value =>
                     !string.IsNullOrWhiteSpace(value)) ?? 0);
 
             return Task.FromResult(HealthCheckResult.Healthy(
-                $"Tenant access is enforced for {enabledDashboards} dashboard(s) with {tenantGrants} grant(s)."));
+                $"Dashboard access is enforced for {enabledDashboards} dashboard(s) with {grants} grant(s)."));
         }
         catch (OptionsValidationException failure)
         {
@@ -53,7 +58,7 @@ public sealed class DashboardTenantAccessHealthCheck(
 /// <summary>
 /// Rejects ambiguous enforced configurations at startup and on configuration
 /// reload. Administrators can disable a dashboard explicitly; an enabled
-/// dashboard must have at least one non-empty, unique tenant grant.
+/// dashboard must have at least one non-empty, unique grant.
 /// </summary>
 public sealed class DashboardTenantAccessOptionsValidator
     : IValidateOptions<DashboardTenantAccessOptions>
@@ -68,6 +73,35 @@ public sealed class DashboardTenantAccessOptionsValidator
         }
 
         var failures = new List<string>();
+        var clientMode = string.Equals(options.Mode,
+            "Client", StringComparison.OrdinalIgnoreCase);
+        if (!clientMode && !string.Equals(options.Mode,
+                "User", StringComparison.OrdinalIgnoreCase))
+        {
+            failures.Add("TenantAccess.Mode must be User or Client.");
+        }
+        if (clientMode)
+        {
+            if (options.ClientDatabases is null ||
+                options.ClientDatabases.Count == 0)
+            {
+                failures.Add(
+                    "TenantAccess.ClientDatabases must register at least one client database.");
+            }
+            else
+            {
+                foreach (var (client, connectionName) in options.ClientDatabases)
+                {
+                    if (!Regex.IsMatch(client,
+                            "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$") ||
+                        string.IsNullOrWhiteSpace(connectionName))
+                    {
+                        failures.Add(
+                            "TenantAccess.ClientDatabases contains an invalid client or connection name.");
+                    }
+                }
+            }
+        }
         if (options.Dashboards is null || options.Dashboards.Count == 0)
         {
             failures.Add(
@@ -104,20 +138,36 @@ public sealed class DashboardTenantAccessOptionsValidator
 
             enabledDashboardCount++;
 
-            var grants = (policy.AllowedTenants ?? [])
+            var grants = ((clientMode
+                    ? policy.AllowedClients
+                    : policy.AllowedTenants) ?? [])
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value.Trim())
                 .ToArray();
             if (grants.Length == 0)
             {
                 failures.Add(
-                    $"TenantAccess dashboard '{dashboardCode}' is enabled but has no tenant grants.");
+                    $"TenantAccess dashboard '{dashboardCode}' is enabled but has no grants.");
             }
             else if (grants.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
                      grants.Length)
             {
                 failures.Add(
-                    $"TenantAccess dashboard '{dashboardCode}' contains duplicate tenant grants.");
+                    $"TenantAccess dashboard '{dashboardCode}' contains duplicate grants.");
+            }
+
+            if (clientMode)
+            {
+                foreach (var client in grants)
+                {
+                    if (options.ClientDatabases?.Keys.Any(value =>
+                            value.Equals(client,
+                                StringComparison.OrdinalIgnoreCase)) != true)
+                    {
+                        failures.Add(
+                            $"TenantAccess dashboard '{dashboardCode}' references an unregistered client database.");
+                    }
+                }
             }
         }
 

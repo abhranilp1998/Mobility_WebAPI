@@ -401,6 +401,9 @@ public sealed class TenantAccessApiFactory : WebApplicationFactory<Program>
                     ["DashboardApi:TaskStatus:Mode"] = "InMemory",
                     ["DashboardApi:WorkDone:Mode"] = "InMemory",
                     ["DashboardApi:TenantAccess:Enforced"] = "true",
+                    ["DashboardApi:TenantAccess:Mode"] = "User",
+                    ["DashboardApi:TenantAccess:Dashboards:CSPL_OPPORTUNITY_FOLLOW_UP:Enabled"] =
+                        "false",
                     [$"DashboardApi:TenantAccess:Dashboards:{CurrentOppCode}:Enabled"] =
                         "true",
                     [$"DashboardApi:TenantAccess:Dashboards:{CurrentOppCode}:DisplayOrder"] =

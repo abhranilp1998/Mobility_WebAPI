@@ -23,6 +23,7 @@ public sealed class LiveDashboardApiFactory : WebApplicationFactory<Program>
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
+                    ["DashboardApi:TenantAccess:Enforced"] = "false",
                     ["DashboardApi:CurrentOpp:Mode"] = "Live",
                     ["DashboardApi:CurrentOpp:Legacy:BaseUrl"] = "http://legacy.test",
                     ["DashboardApi:CurrentOpp:Legacy:TimeoutSeconds"] = "5",
@@ -70,7 +71,7 @@ public sealed class FakeLegacyFollowUpSource
                     ["Line2"] = "Action Plan: Call procurement|live-doc-01",
                     ["Line3"] = "Seller One|Buyer One|9000000001|Bengaluru",
                     ["SalesPerson_Name"] = "Seller One",
-                    ["Agent_Name"] = "Agent One",
+                    ["Agent_Name"] = "Agent: Agent One",
                     ["Followup_Date"] = "2026-08-01",
                     ["AttachmentDocumentGuid"] = "live-doc-01",
                     ["AttachmentCount"] = "2",
@@ -103,7 +104,6 @@ public sealed class FakeLegacyFollowUpSource
                     ["Line2"] = "Action Plan: Review proposal|live-doc-03",
                     ["Line3"] = "Seller Three|Buyer Three|9000000003|Delhi",
                     ["SalesPerson_Name"] = "Seller Three",
-                    ["Agent_Name"] = "Agent Three",
                     ["Followup_Date"] = "2026-08-03",
                     ["AttachmentDocumentGuid"] = "live-doc-03",
                     ["AttachmentCount"] = "1",
@@ -141,7 +141,7 @@ public sealed class FakeLegacyFollowUpSource
             {
                 ["ID"] = "AGENT-02",
                 ["Destination"] = "AGENT-02",
-                ["Line1"] = "Seller Three|Proposal",
+                ["Line1"] = "Agent:Agent Three|Proposal",
                 ["Line2"] = "live-doc-03",
                 ["NxtPg_Body"] =
                     "ClassName=Generic_Udf_API&FunctionName=Opportunitie_DetailList"
@@ -240,6 +240,7 @@ public sealed class MissingLiveConfigurationDashboardApiFactory
                 {
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
+                    ["DashboardApi:TenantAccess:Enforced"] = "false",
                     ["DashboardApi:CurrentOpp:Mode"] = "Live",
                     ["DashboardApi:CurrentOpp:Legacy:BaseUrl"] = "",
                     ["DashboardApi:CurrentOpp:Tenants:development-user:CustomerId"] = "CUSTOMER-01",

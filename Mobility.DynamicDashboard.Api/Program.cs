@@ -297,6 +297,10 @@ builder.Services.AddSingleton<
     ILegacyDatabaseAliasProvider,
     HttpContextLegacyDatabaseAliasProvider>();
 builder.Services.AddSingleton<
+    IClientMembershipVerifier,
+    SqlClientMembershipVerifier>();
+builder.Services.AddSingleton<ClientDashboardScopeSelection>();
+builder.Services.AddSingleton<
     IConfigurationDiagnosticsService,
     ConfigurationDiagnosticsService>();
 builder.Services

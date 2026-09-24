@@ -62,7 +62,8 @@ public sealed record TaskStatusScope(
 /// </summary>
 public sealed class TaskStatusScopeResolver(
     IOptions<TaskStatusLiveOptions> options,
-    ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider)
+    ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider,
+    ClientDashboardScopeSelection? clientScope = null)
 {
     public TaskStatusScope Resolve(
         string callerId,
@@ -74,7 +75,8 @@ public sealed class TaskStatusScopeResolver(
         var tenant = settings.Tenants.FirstOrDefault(item =>
             item.Key.Equals(normalizedCaller, StringComparison.OrdinalIgnoreCase)).Value;
 
-        if (tenant is null)
+        var clientMode = clientScope?.Enabled == true;
+        if (tenant is null && !clientMode)
         {
             throw Failure(
                 StatusCodes.Status403Forbidden,
@@ -84,13 +86,13 @@ public sealed class TaskStatusScopeResolver(
 
         // Default the ERP customer to the authenticated login tenant. Existing
         // explicit mappings continue to override this for non-aligned IDs.
-        var customerId = string.IsNullOrWhiteSpace(tenant.CustomerId)
+        var customerId = string.IsNullOrWhiteSpace(tenant?.CustomerId)
             ? normalizedCaller
             : tenant.CustomerId.Trim();
-        var loginUserId = string.IsNullOrWhiteSpace(tenant.LoginUserId)
+        var loginUserId = string.IsNullOrWhiteSpace(tenant?.LoginUserId)
             ? customerId
             : tenant.LoginUserId.Trim();
-        var taskUserId = string.IsNullOrWhiteSpace(tenant.TaskUserId)
+        var taskUserId = string.IsNullOrWhiteSpace(tenant?.TaskUserId)
             ? customerId
             : tenant.TaskUserId.Trim();
         if (customerId.Length == 0 || loginUserId.Length == 0 ||
@@ -123,17 +125,19 @@ public sealed class TaskStatusScopeResolver(
         }
 
         var branchId = ResolveScopeValue(
-            context?.BranchId,
-            tenant.DefaultBranchId,
-            tenant.AllowedBranchIds,
+            clientMode ? clientScope!.BranchId(context) : context?.BranchId,
+            tenant?.DefaultBranchId ?? string.Empty,
+            tenant?.AllowedBranchIds ?? [],
             "branchId",
-            useConfiguredDefaults);
+            useConfiguredDefaults,
+            clientMode);
         var financialYearId = ResolveScopeValue(
-            context?.FinancialYearId,
-            tenant.DefaultFinancialYearId,
-            tenant.AllowedFinancialYearIds,
+            clientMode ? clientScope!.FinancialYearId(context) : context?.FinancialYearId,
+            tenant?.DefaultFinancialYearId ?? string.Empty,
+            tenant?.AllowedFinancialYearIds ?? [],
             "financialYearId",
-            useConfiguredDefaults);
+            useConfiguredDefaults,
+            clientMode);
 
         return new TaskStatusScope(
             normalizedCaller,
@@ -151,7 +155,8 @@ public sealed class TaskStatusScopeResolver(
         string configuredDefault,
         IReadOnlyList<string> allowedValues,
         string fieldName,
-        bool useConfiguredDefaults)
+        bool useConfiguredDefaults,
+        bool allowUnrestricted)
     {
         var allowed = allowedValues
             .Select(value => value.Trim())
@@ -177,6 +182,7 @@ public sealed class TaskStatusScopeResolver(
 
         if (allowed.Count == 0)
         {
+            if (allowUnrestricted) return value;
             throw Failure(
                 StatusCodes.Status503ServiceUnavailable,
                 "task_status_live_configuration_missing",

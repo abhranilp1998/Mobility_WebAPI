@@ -39,15 +39,17 @@ public sealed class DynamicDashboardService(
         var definitions = await repository.GetDefinitionsAsync(
             cancellationToken);
 
-        var evaluatedDefinitions = definitions
-            .Select(definition => new
-            {
-                Definition = definition,
-                Access = tenantAccess.Evaluate(
-                    tenantId,
-                    definition.DashboardCode)
-            })
-            .ToArray();
+        var evaluatedDefinitions = new List<(
+            DashboardDefinitionResponse Definition,
+            DashboardTenantAccessDecision Access)>();
+        foreach (var definition in definitions)
+        {
+            var access = await tenantAccess.EvaluateAsync(
+                tenantId,
+                definition.DashboardCode,
+                cancellationToken);
+            evaluatedDefinitions.Add((definition, access));
+        }
         if (evaluatedDefinitions.Any(item =>
                 item.Access.Failure ==
                     DashboardTenantAccessFailure.ConfigurationInvalid))
@@ -131,9 +133,10 @@ public sealed class DynamicDashboardService(
                 "No published dashboard is registered for this screen identifier.");
         }
 
-        var access = tenantAccess.Evaluate(
+        var access = await tenantAccess.EvaluateAsync(
             tenantId,
-            definition.DashboardCode);
+            definition.DashboardCode,
+            cancellationToken);
         if (!access.Allowed)
         {
             return TenantAccessFailure<DashboardDefinitionResponse>(access);
@@ -192,9 +195,10 @@ public sealed class DynamicDashboardService(
                 "No handler is registered for this dashboard.");
         }
 
-        var access = tenantAccess.Evaluate(
+        var access = await tenantAccess.EvaluateAsync(
             callerId,
-            definition.DashboardCode);
+            definition.DashboardCode,
+            cancellationToken);
         if (!access.Allowed)
         {
             return TenantAccessFailure<DashboardRowsResponse>(access);
@@ -328,9 +332,10 @@ public sealed class DynamicDashboardService(
                 "No handler is registered for this dashboard.");
         }
 
-        var access = tenantAccess.Evaluate(
+        var access = await tenantAccess.EvaluateAsync(
             callerId,
-            definition.DashboardCode);
+            definition.DashboardCode,
+            cancellationToken);
         if (!access.Allowed)
         {
             return TenantAccessFailure<DashboardFilterOptionsResponse>(access);
@@ -409,7 +414,8 @@ public sealed class DynamicDashboardService(
             DashboardActionRequest request,
             CancellationToken cancellationToken)
     {
-        var access = tenantAccess.Evaluate(callerId, dashboardCode);
+        var access = await tenantAccess.EvaluateAsync(
+            callerId, dashboardCode, cancellationToken);
         if (!access.Allowed)
         {
             return TenantAccessFailure<DashboardActionResponse>(access);
@@ -609,7 +615,8 @@ public sealed class DynamicDashboardService(
             string callerId,
             CancellationToken cancellationToken)
     {
-        var access = tenantAccess.Evaluate(callerId, dashboardCode);
+        var access = await tenantAccess.EvaluateAsync(
+            callerId, dashboardCode, cancellationToken);
         if (!access.Allowed)
         {
             return TenantAccessFailure<DashboardAttachmentsResponse>(access);

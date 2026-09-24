@@ -74,6 +74,11 @@ public sealed class LiveDashboardApiTests(
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = await ReadJsonAsync(response);
         Assert.Equal(3, body.RootElement.GetProperty("totalCount").GetInt32());
+        var rows = body.RootElement.GetProperty("rows").EnumerateArray().ToList();
+        Assert.Equal(
+            "Agent Three",
+            rows.Single(row => row.GetProperty("rowKey").GetString() == "LIVE-TARGET-03")
+                .GetProperty("values").GetProperty("agentName").GetString());
         Assert.Equal(
             currentCallsBefore + 1,
             factory.Source.CurrentFollowUpCallCount);

@@ -275,6 +275,10 @@ public sealed class DashboardViewApiFactory : WebApplicationFactory<Program>
                 ["DashboardApi:Views:Profiles:all-followups-salesperson:Grouping:Field"] = "salesPersonName",
                 ["DashboardApi:Views:Profiles:all-followups-salesperson:Grouping:Label"] = "Salesperson",
                 ["DashboardApi:Views:Profiles:all-followups-salesperson:Grouping:EmptyValue"] = "Unassigned Salesperson",
+                ["DashboardApi:Views:Profiles:all-followups-salesperson:FilterKeys:0"] = "customer",
+                ["DashboardApi:Views:Profiles:all-followups-salesperson:FilterKeys:1"] = "salesPerson",
+                ["DashboardApi:Views:Profiles:all-followups-salesperson:FilterKeys:2"] = "agent",
+                ["DashboardApi:Views:Profiles:all-followups-salesperson:FilterKeys:3"] = "search",
                 ["DashboardApi:Views:CompanyAssignments:company_b:CSPL_CURRENT_OPP_ALL_FOLLOWUPS"] =
                     "all-followups-salesperson",
                 ["DashboardApi:Views:Profiles:all-followups-flat:DashboardCode"] =
