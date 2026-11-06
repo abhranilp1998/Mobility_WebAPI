@@ -7,7 +7,8 @@ namespace Mobility.DynamicDashboard.Api.Services;
 public sealed class DynamicDashboardService(
     IDashboardRepository repository,
     IDashboardTenantAccessService tenantAccess,
-    DashboardViewResolver views)
+    DashboardViewResolver views,
+    SessionDashboardAccess? sessionAccess = null)
     : IDynamicDashboardService
 {
     public async Task<DashboardServiceResult<DashboardCatalogResponse>>
@@ -538,8 +539,14 @@ public sealed class DynamicDashboardService(
                 "Refresh the dashboard row and retry with its current rowVersion.");
         }
 
+        var session = sessionAccess?.Current;
+        var callerScope = session is null ? callerId : JsonSerializer.Serialize(new[]
+        {
+            session.ClientCode, session.DatabaseAlias, session.AccountSubject, callerId,
+            request.Context.BranchId ?? "", request.Context.FinancialYearId ?? ""
+        });
         var replayKey = registration.IsMutation
-            ? $"{callerId}|{registration.DashboardCode}|{registration.ActionCode}|{row.RowKey}|{idempotencyKey}"
+            ? $"{callerScope}|{registration.DashboardCode}|{registration.ActionCode}|{row.RowKey}|{idempotencyKey}"
             : null;
         if (replayKey is not null)
         {

@@ -4,6 +4,13 @@ Use this checklist after copying a new `WindowsIIS` publish output to the
 Dashboard API server. It records the environment-specific changes that should
 not be guessed during deployment.
 
+The authentication rework defaults to `Mode=Session`, even when IIS selects
+Development. Before publishing this source, provision the SQL session schema
+and secret connection, enroll approved login clients and screens, and apply
+the confirmed per-client user rules. See
+[the authentication activation procedure](../contracts/operational-dashboards/authentication-rework.md).
+The old Development flag alone will no longer authenticate Flutter requests.
+
 ## 1. Confirm which ASP.NET Core environment IIS uses
 
 The committed `web.config` currently sets:

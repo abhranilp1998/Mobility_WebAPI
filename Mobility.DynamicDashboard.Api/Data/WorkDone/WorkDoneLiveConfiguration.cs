@@ -6,10 +6,9 @@ using Mobility.DynamicDashboard.Api.Services;
 namespace Mobility.DynamicDashboard.Api.Data.WorkDone;
 
 /// <summary>
-/// Server-owned settings for the CSPL Work Done adapter. The renderer sends
-/// its authenticated caller, selected branch/FY, and short Appdata.Conn_
-/// database alias; it never receives or supplies the legacy URL, a SQL
-/// connection string, or ASMX operation names.
+/// Server-owned settings for the CSPL Work Done adapter. Session requests use
+/// their verified client's customer, service and database with the selected
+/// branch/FY. Legacy alias headers remain for Development compatibility.
 /// </summary>
 public sealed class WorkDoneLiveOptions
 {
@@ -82,9 +81,9 @@ public sealed class WorkDoneScopeResolver(
 
         // Default the ERP customer to the authenticated login tenant. Existing
         // explicit mappings continue to override this for non-aligned IDs.
-        var customerId = string.IsNullOrWhiteSpace(tenant?.CustomerId)
+        var customerId = clientScope?.SessionCustomerId ?? (string.IsNullOrWhiteSpace(tenant?.CustomerId)
             ? normalizedCaller
-            : tenant.CustomerId.Trim();
+            : tenant.CustomerId.Trim());
         if (customerId.Length == 0)
         {
             throw Failure(
@@ -95,7 +94,7 @@ public sealed class WorkDoneScopeResolver(
 
         var legacyDatabaseAlias = legacyDatabaseAliasProvider.GetRequiredAlias();
 
-        var baseUrl = settings.Legacy.BaseUrl?.Trim() ?? string.Empty;
+        var baseUrl = (clientScope?.SessionLegacyBaseUrl ?? settings.Legacy.BaseUrl)?.Trim() ?? string.Empty;
         if (baseUrl.Length == 0)
         {
             throw Failure(
@@ -116,14 +115,14 @@ public sealed class WorkDoneScopeResolver(
         var branchId = ResolveScopeValue(
             clientMode ? clientScope!.BranchId(context) : context?.BranchId,
             tenant?.DefaultBranchId ?? string.Empty,
-            tenant?.AllowedBranchIds ?? [],
+            clientScope?.SessionBound == true ? [] : tenant?.AllowedBranchIds ?? [],
             "branchId",
             useConfiguredDefaults,
             clientMode);
         var financialYearId = ResolveScopeValue(
             clientMode ? clientScope!.FinancialYearId(context) : context?.FinancialYearId,
             tenant?.DefaultFinancialYearId ?? string.Empty,
-            tenant?.AllowedFinancialYearIds ?? [],
+            clientScope?.SessionBound == true ? [] : tenant?.AllowedFinancialYearIds ?? [],
             "financialYearId",
             useConfiguredDefaults,
             clientMode);

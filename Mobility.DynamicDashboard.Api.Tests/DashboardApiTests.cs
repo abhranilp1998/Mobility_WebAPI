@@ -583,7 +583,7 @@ public sealed class DashboardApiTests(
 
         Assert.Equal("3.1.1", root.GetProperty("openapi").GetString());
         var paths = root.GetProperty("paths");
-        Assert.Equal(6, paths.EnumerateObject().Count());
+        Assert.Equal(11, paths.EnumerateObject().Count());
         Assert.True(paths.TryGetProperty(
             "/api/v1/dashboards/catalog",
             out var catalogPath));

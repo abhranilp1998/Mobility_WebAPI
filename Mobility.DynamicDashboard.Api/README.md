@@ -3,6 +3,16 @@
 Backend API for rendering the four CSPL operational dashboards in the Flutter
 dynamic dashboard renderer.
 
+The authentication rework now uses SQL-backed opaque bearer sessions. See
+[authentication implementation and activation](../contracts/operational-dashboards/authentication-rework.md).
+Session creation and the confirmed client/screen/user rules are implemented.
+An enrolled screen permits all authenticated client users when its optional
+user list is empty; explicit user lists restrict access. Unconfigured screens
+remain on the legacy route through the rollout lookup.
+An anonymous `/api/v1/dashboards/rollout` lookup now distinguishes migration
+enrollment from authentication and permission failures. The Flutter consumer
+integration for this lookup and bearer sessions is still pending.
+
 The API is definition-driven: the client first loads a dashboard definition,
 then uses that definition to render filters, grouping, cards, summaries,
 actions, and attachments. The client must not parse legacy packed values such
@@ -42,6 +52,17 @@ dotnet run --project Mobility.DynamicDashboard.Api/Mobility.DynamicDashboard.Api
 
 The HTTP development server runs at `http://localhost:5282`.
 
+Default authentication mode is `Session`, including in Development. Configure
+the session database and approved legacy login clients as described in the
+authentication guide. Existing Flutter identity headers do not authenticate
+Session mode.
+
+For isolated local compatibility work, explicitly set both
+`DashboardApi__Authentication__Mode=Development` and
+`DashboardApi__Authentication__DevelopmentBypassEnabled=true` before launching.
+This bypass is prohibited outside the ASP.NET Core Development environment
+and must not be enabled on a shared IIS site.
+
 ### JetBrains Rider Hot Reload
 
 Use Rider's generated `Mobility.DynamicDashboard.Api: http` launch-settings
@@ -77,6 +98,7 @@ sends a connection string or legacy URL:
 | `DefaultConnection` | Client information and client update queries. |
 | `acenet` | Database health check connection. |
 | `anupalan` | Card-label lookup connection. |
+| `DashboardSessions` | Durable API sessions and consumed refresh-token hashes. |
 
 For local Development, the actual values are stored through .NET User Secrets
 and override the empty keys in `appsettings.json`:
@@ -137,11 +159,12 @@ creating an incomplete folder if this file is missing. The file already holds
 the working `anupalan_live` connection used by this deployment; do not edit the
 published JSON or `web.config` on the server.
 
-The current HTTP-only workplace deployment intentionally runs with the
-Development authentication handler. The committed `web.config` preserves that
-environment across every publish. Moving to real Production still requires
-the configured JWT Authority/Audience and the corresponding HTTPS and
-authentication work described above.
+The committed `web.config` still selects the ASP.NET Core Development
+environment. That environment no longer selects the identity bypass by itself:
+the default mode is now Session. Prepare the SQL session store and approved
+client mappings before publishing this rework. The earlier JWT Authority and
+Audience placeholders are no longer used. Existing deployed authentication
+has not been changed by these local source edits.
 
 `appsettings.Server.json` is excluded from source control because the publish
 folder contains the database credential. Restrict access to the project and
@@ -161,32 +184,32 @@ dotnet test Mobility.DynamicDashboard.Api.Tests/Mobility.DynamicDashboard.Api.Te
 
 ## Authentication and common headers
 
-All dashboard endpoints require the `DashboardApi` authorization policy.
+All dashboard endpoints require the `DashboardApi` authorization policy and
+the `operational-dashboards` scope. The server grants that scope only for an
+authenticated account with access to an enrolled client screen, then checks
+the particular screen on definitions, rows, options, actions and attachments.
+Selected branch/year values come from the app; customer identity, database and
+service destination come from the verified session and client configuration.
 
-In Development, the local authentication handler accepts:
-
-```http
-X-Development-User: development-user
-```
-
-If omitted, the development user defaults to `development-user`. The
-`actingUserId` in a rows or action request must match this caller ID.
-
-Outside Development, configure these values through deployment configuration:
-
-```text
-DashboardApi:Authentication:Authority
-DashboardApi:Authentication:Audience
-```
-
-Then send:
+Use `POST /api/v1/auth/login` to obtain an opaque access token, then send:
 
 ```http
 Authorization: Bearer <access-token>
 ```
 
-The API does not invent production issuer, audience, tenant, secret, or
-identity configuration.
+Use `POST /api/v1/auth/refresh` to rotate the access/refresh pair and
+`POST /api/v1/auth/logout` to revoke the active session. Credentials and
+identity/database mappings are verified on the server. See the authentication
+guide for the response contract and provisioning requirements.
+
+Only explicitly configured local Development compatibility mode accepts:
+
+```text
+X-Development-User: development-user
+```
+
+In that local compatibility mode, an omitted header defaults to
+`development-user`. This identity behavior is not available in Session mode.
 
 ## Client-controlled dashboard catalog
 

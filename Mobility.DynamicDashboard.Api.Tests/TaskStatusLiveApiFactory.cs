@@ -32,6 +32,7 @@ public sealed class TaskStatusLiveApiFactory : WebApplicationFactory<Program>
             configuration.AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
+                    ["DashboardApi:Authentication:Mode"] = "Development",
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
                     ["DashboardApi:TenantAccess:Enforced"] = "false",
@@ -292,6 +293,7 @@ public sealed class MissingTaskStatusLiveConfigurationApiFactory
             configuration.AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
+                    ["DashboardApi:Authentication:Mode"] = "Development",
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
                     ["DashboardApi:TenantAccess:Enforced"] = "false",

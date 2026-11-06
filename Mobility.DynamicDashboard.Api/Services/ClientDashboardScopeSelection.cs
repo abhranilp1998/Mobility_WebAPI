@@ -11,7 +11,8 @@ namespace Mobility.DynamicDashboard.Api.Services;
 /// </summary>
 public sealed partial class ClientDashboardScopeSelection(
     IOptionsMonitor<DashboardTenantAccessOptions> accessOptions,
-    IHttpContextAccessor httpContextAccessor)
+    IHttpContextAccessor httpContextAccessor,
+    SessionDashboardAccess? sessionAccess = null)
 {
     public const string BranchHeader = "X-Dashboard-Branch-Id";
     public const string FinancialYearHeader = "X-Dashboard-Financial-Year-Id";
@@ -19,10 +20,14 @@ public sealed partial class ClientDashboardScopeSelection(
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$")]
     private static partial Regex ScopeIdPattern();
 
-    public bool Enabled =>
+    public bool SessionBound => sessionAccess?.Current is not null;
+    public string? SessionCustomerId => sessionAccess?.Current?.CustomerId;
+    public string? SessionLegacyBaseUrl => sessionAccess?.LegacyBaseUrl;
+
+    public bool Enabled => SessionBound || (
         accessOptions.CurrentValue.Enforced &&
         string.Equals(accessOptions.CurrentValue.Mode,
-            "Client", StringComparison.OrdinalIgnoreCase);
+            "Client", StringComparison.OrdinalIgnoreCase));
 
     public string BranchId(DashboardRequestContext? context) =>
         SelectedValue(context?.BranchId, BranchHeader, "branchId");

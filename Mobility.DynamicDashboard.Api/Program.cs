@@ -1,9 +1,9 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using System.Text.Json.Serialization;
+using Mobility.DynamicDashboard.Api.Authentication;
 using Mobility.DynamicDashboard.Api.Data.CurrentOppAllFollowups;
 using Mobility.DynamicDashboard.Api.Data.FollowUps;
 using Mobility.DynamicDashboard.Api.Data.Legacy;
@@ -87,6 +87,12 @@ builder.Services
         tags: ["ready"]);
 builder.Services.AddOpenApi("v1", options =>
 {
+    options.AddOperationTransformer((operation, context, _) =>
+    {
+        if (context.Description.ActionDescriptor.EndpointMetadata.OfType<IAllowAnonymous>().Any())
+            operation.Security = [];
+        return Task.CompletedTask;
+    });
     options.AddDocumentTransformer((document, _, _) =>
     {
         document.Info.Title = "Mobility Operational Dashboard Renderer API";
@@ -102,9 +108,9 @@ builder.Services.AddOpenApi("v1", options =>
             {
                 Type = SecuritySchemeType.Http,
                 Scheme = "bearer",
-                BearerFormat = "JWT",
+                BearerFormat = "Opaque session token",
                 Description =
-                    "Production bearer token. Development can use the explicitly configured local authentication bypass."
+                    "Access token issued by /api/v1/auth/login. Refresh credentials cannot authenticate API requests."
             };
         document.Security ??= [];
         document.Security.Add(new OpenApiSecurityRequirement
@@ -178,81 +184,22 @@ builder.Services.AddOpenApi("v1", options =>
     });
 });
 
-const string developmentScheme = "DashboardDevelopment";
-if (builder.Environment.IsDevelopment())
-{
-    // The bypass is registered only in Development and must also be enabled by
-    // explicit configuration. It never supplies production issuer/audience data.
-    builder.Services
-        .AddAuthentication(developmentScheme)
-        .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthenticationHandler>(
-            developmentScheme,
-            _ => { });
-}
-else
-{
-    var authority = builder.Configuration[
-        "DashboardApi:Authentication:Authority"];
-    var audience = builder.Configuration[
-        "DashboardApi:Authentication:Audience"];
-
-    // Production authentication fails closed until deployment supplies both
-    // values from its configuration/secret store.
-    if (string.IsNullOrWhiteSpace(authority) ||
-        string.IsNullOrWhiteSpace(audience))
+builder.Services.Configure<LegacyAuthenticationOptions>(
+    builder.Configuration.GetSection(LegacyAuthenticationOptions.SectionName));
+builder.Services.AddHttpClient<ILegacyAccountAuthenticator, LegacyAccountAuthenticator>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
-        throw new InvalidOperationException(
-            "DashboardApi authentication Authority and Audience must be configured outside Development.");
-    }
+        AllowAutoRedirect = false,
+        UseCookies = false
+    })
+    // Disable default HTTP loggers on this client. Credential values and
+    // response bodies must never be logged.
+    .RemoveAllLoggers();
 
-    builder.Services
-        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(options =>
-        {
-            options.Authority = authority;
-            options.Audience = audience;
-            options.RequireHttpsMetadata = true;
-            options.Events = new JwtBearerEvents
-            {
-                OnChallenge = async context =>
-                {
-                    context.HandleResponse();
-                    context.Response.StatusCode =
-                        StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsJsonAsync(
-                        DashboardProblemFactory.Create(
-                            context.HttpContext,
-                            StatusCodes.Status401Unauthorized,
-                            "authentication_required",
-                            "Authentication is required."),
-                        options: null,
-                        contentType: "application/problem+json",
-                        cancellationToken:
-                            context.HttpContext.RequestAborted);
-                },
-                OnForbidden = async context =>
-                {
-                    context.Response.StatusCode =
-                        StatusCodes.Status403Forbidden;
-                    await context.Response.WriteAsJsonAsync(
-                        DashboardProblemFactory.Create(
-                            context.HttpContext,
-                            StatusCodes.Status403Forbidden,
-                            "access_forbidden",
-                            "The authenticated caller is not authorized."),
-                        options: null,
-                        contentType: "application/problem+json",
-                        cancellationToken:
-                            context.HttpContext.RequestAborted);
-                }
-            };
-        });
-}
-
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(
-        "DashboardApi",
-        policy => policy.RequireAuthenticatedUser());
+builder.Services.AddSessionAuthentication(builder.Configuration, builder.Environment);
+builder.Services.Configure<DashboardRolloutOptions>(
+    builder.Configuration.GetSection(DashboardRolloutOptions.SectionName));
+builder.Services.AddScoped<DashboardRolloutService>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DashboardCors", policy =>
@@ -373,7 +320,21 @@ else
 }
 
 app.UseExceptionHandler();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/v1/auth") ||
+        context.Request.Path.StartsWithSegments("/api/v1/dashboards/rollout"))
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers.Pragma = "no-cache";
+            return Task.CompletedTask;
+        });
+    await next(context);
+});
+app.UseRouting();
 app.UseCors("DashboardCors");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

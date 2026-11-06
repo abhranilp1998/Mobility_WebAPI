@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
+using Mobility.DynamicDashboard.Api.Authentication;
 using Mobility.DynamicDashboard.Api.Data.Legacy;
 using Mobility.DynamicDashboard.Api.Services;
 using Xunit;
@@ -7,6 +9,32 @@ namespace Mobility.DynamicDashboard.Api.Tests;
 
 public sealed class LegacyDatabaseAliasProviderTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("session_database")]
+    public void SessionUsesServerDatabaseMappingWithoutRequiringAHeader(string? header)
+    {
+        var context = new DefaultHttpContext();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ApiSessionDefaults.DatabaseClaim, "session_database")], ApiSessionDefaults.Scheme));
+        if (header is not null) context.Request.Headers[LegacyDatabaseAliasHeader.Name] = header;
+        var provider = new HttpContextLegacyDatabaseAliasProvider(
+            new HttpContextAccessor { HttpContext = context });
+        Assert.Equal("session_database", provider.GetRequiredAlias());
+    }
+
+    [Fact]
+    public void SessionDatabaseCannotBeOverriddenByARequestHeader()
+    {
+        var context = new DefaultHttpContext();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ApiSessionDefaults.DatabaseClaim, "session_database")], ApiSessionDefaults.Scheme));
+        context.Request.Headers[LegacyDatabaseAliasHeader.Name] = "different_database";
+        var provider = new HttpContextLegacyDatabaseAliasProvider(
+            new HttpContextAccessor { HttpContext = context });
+        Assert.Equal(403, Assert.Throws<DashboardDataSourceException>(provider.GetRequiredAlias).StatusCode);
+    }
+
     [Fact]
     public void ReadsShortDatabaseAliasFromRequestHeader()
     {

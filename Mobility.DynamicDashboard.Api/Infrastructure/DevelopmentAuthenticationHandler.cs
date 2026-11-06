@@ -19,7 +19,9 @@ public sealed class DevelopmentAuthenticationHandler(
     {
         var bypassEnabled = configuration.GetValue<bool>(
             "DashboardApi:Authentication:DevelopmentBypassEnabled");
-        if (!bypassEnabled)
+        if (!bypassEnabled || !string.Equals(
+                configuration["DashboardApi:Authentication:Mode"], "Development",
+                StringComparison.OrdinalIgnoreCase))
         {
             return Task.FromResult(AuthenticateResult.Fail(
                 "Development authentication bypass is disabled."));

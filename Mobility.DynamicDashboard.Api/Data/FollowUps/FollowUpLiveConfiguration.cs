@@ -66,10 +66,9 @@ public sealed record FollowUpScope(
     int TimeoutSeconds);
 
 /// <summary>
-/// Resolves and validates all values needed by the legacy call. The request
-/// supplies the selected branch/year only as a candidate; the allow-lists and
-/// customer mapping remain server-owned authorization data. The database alias
-/// comes from the app request and is validated separately.
+/// Session requests use their authenticated customer, client service and
+/// database, with the branch/year selected in the app. The older tenant
+/// mappings and branch/year allow-lists remain for Development compatibility.
 /// </summary>
 public sealed class FollowUpScopeResolver(
     ILegacyDatabaseAliasProvider legacyDatabaseAliasProvider,
@@ -98,9 +97,9 @@ public sealed class FollowUpScopeResolver(
         // The login subject is the tenant/customer identity by default. An
         // explicit value remains supported for legacy installations where the
         // authenticated subject and ERP customer identifier differ.
-        var customerId = string.IsNullOrWhiteSpace(tenant?.CustomerId)
+        var customerId = clientScope?.SessionCustomerId ?? (string.IsNullOrWhiteSpace(tenant?.CustomerId)
             ? normalizedCaller
-            : tenant.CustomerId.Trim();
+            : tenant.CustomerId.Trim());
         if (customerId.Length == 0)
         {
             throw Failure(
@@ -111,7 +110,8 @@ public sealed class FollowUpScopeResolver(
 
         var legacyDatabaseAlias = legacyDatabaseAliasProvider.GetRequiredAlias();
 
-        if (string.IsNullOrWhiteSpace(settings.Legacy.BaseUrl))
+        var baseUrl = clientScope?.SessionLegacyBaseUrl ?? settings.Legacy.BaseUrl;
+        if (string.IsNullOrWhiteSpace(baseUrl))
         {
             throw Failure(
                 StatusCodes.Status503ServiceUnavailable,
@@ -119,7 +119,7 @@ public sealed class FollowUpScopeResolver(
                 "The follow-up legacy service base URL is not configured.");
         }
 
-        if (!Uri.TryCreate(settings.Legacy.BaseUrl.Trim(), UriKind.Absolute, out var baseUri) ||
+        if (!Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var baseUri) ||
             baseUri.Scheme is not ("http" or "https"))
         {
             throw Failure(
@@ -131,14 +131,14 @@ public sealed class FollowUpScopeResolver(
         var branchId = ResolveScopeValue(
             clientMode ? clientScope!.BranchId(context) : context?.BranchId,
             tenant?.DefaultBranchId ?? string.Empty,
-            tenant?.AllowedBranchIds ?? [],
+            clientScope?.SessionBound == true ? [] : tenant?.AllowedBranchIds ?? [],
             "branchId",
             useConfiguredDefaults,
             clientMode);
         var financialYearId = ResolveScopeValue(
             clientMode ? clientScope!.FinancialYearId(context) : context?.FinancialYearId,
             tenant?.DefaultFinancialYearId ?? string.Empty,
-            tenant?.AllowedFinancialYearIds ?? [],
+            clientScope?.SessionBound == true ? [] : tenant?.AllowedFinancialYearIds ?? [],
             "financialYearId",
             useConfiguredDefaults,
             clientMode);

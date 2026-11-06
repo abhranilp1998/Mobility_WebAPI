@@ -6,9 +6,9 @@ using Mobility.DynamicDashboard.Api.Services;
 namespace Mobility.DynamicDashboard.Api.Data.TaskStatus;
 
 /// <summary>
-/// Server-owned configuration for the Task Status legacy adapter. The mobile
-/// client supplies its short Appdata.Conn_ database alias, but never a legacy
-/// URL, SQL connection string, login ID, or task-user ID.
+/// Server-owned configuration for the Task Status legacy adapter. Session
+/// requests obtain customer, service and database identity from their verified
+/// client; older Development requests can use the legacy alias header.
 /// </summary>
 public sealed class TaskStatusLiveOptions
 {
@@ -86,13 +86,13 @@ public sealed class TaskStatusScopeResolver(
 
         // Default the ERP customer to the authenticated login tenant. Existing
         // explicit mappings continue to override this for non-aligned IDs.
-        var customerId = string.IsNullOrWhiteSpace(tenant?.CustomerId)
+        var customerId = clientScope?.SessionCustomerId ?? (string.IsNullOrWhiteSpace(tenant?.CustomerId)
             ? normalizedCaller
-            : tenant.CustomerId.Trim();
-        var loginUserId = string.IsNullOrWhiteSpace(tenant?.LoginUserId)
+            : tenant.CustomerId.Trim());
+        var loginUserId = clientScope?.SessionBound == true || string.IsNullOrWhiteSpace(tenant?.LoginUserId)
             ? customerId
             : tenant.LoginUserId.Trim();
-        var taskUserId = string.IsNullOrWhiteSpace(tenant?.TaskUserId)
+        var taskUserId = clientScope?.SessionBound == true || string.IsNullOrWhiteSpace(tenant?.TaskUserId)
             ? customerId
             : tenant.TaskUserId.Trim();
         if (customerId.Length == 0 || loginUserId.Length == 0 ||
@@ -106,7 +106,7 @@ public sealed class TaskStatusScopeResolver(
 
         var legacyDatabaseAlias = legacyDatabaseAliasProvider.GetRequiredAlias();
 
-        var baseUrl = settings.Legacy.BaseUrl?.Trim() ?? string.Empty;
+        var baseUrl = (clientScope?.SessionLegacyBaseUrl ?? settings.Legacy.BaseUrl)?.Trim() ?? string.Empty;
         if (baseUrl.Length == 0)
         {
             throw Failure(
@@ -127,14 +127,14 @@ public sealed class TaskStatusScopeResolver(
         var branchId = ResolveScopeValue(
             clientMode ? clientScope!.BranchId(context) : context?.BranchId,
             tenant?.DefaultBranchId ?? string.Empty,
-            tenant?.AllowedBranchIds ?? [],
+            clientScope?.SessionBound == true ? [] : tenant?.AllowedBranchIds ?? [],
             "branchId",
             useConfiguredDefaults,
             clientMode);
         var financialYearId = ResolveScopeValue(
             clientMode ? clientScope!.FinancialYearId(context) : context?.FinancialYearId,
             tenant?.DefaultFinancialYearId ?? string.Empty,
-            tenant?.AllowedFinancialYearIds ?? [],
+            clientScope?.SessionBound == true ? [] : tenant?.AllowedFinancialYearIds ?? [],
             "financialYearId",
             useConfiguredDefaults,
             clientMode);

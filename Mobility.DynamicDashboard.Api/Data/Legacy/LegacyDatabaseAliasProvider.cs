@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using System.Security.Claims;
+using Mobility.DynamicDashboard.Api.Authentication;
 using Mobility.DynamicDashboard.Api.Services;
 
 namespace Mobility.DynamicDashboard.Api.Data.Legacy;
@@ -27,8 +29,18 @@ public sealed partial class HttpContextLegacyDatabaseAliasProvider(
 
     public string GetRequiredAlias()
     {
+        var sessionAlias = httpContextAccessor.HttpContext?.User
+            .FindFirstValue(ApiSessionDefaults.DatabaseClaim);
         var values = httpContextAccessor.HttpContext?
             .Request.Headers[LegacyDatabaseAliasHeader.Name];
+        if (!string.IsNullOrWhiteSpace(sessionAlias))
+        {
+            if (values is { Count: > 0 } && (values.Value.Count != 1 ||
+                !sessionAlias.Equals(values.Value[0], StringComparison.OrdinalIgnoreCase)))
+                throw new DashboardDataSourceException(403, "session_context_override",
+                    "Session context cannot be overridden.", "Session context cannot be overridden.");
+            return sessionAlias;
+        }
         if (values is null || values.Value.Count != 1 ||
             string.IsNullOrWhiteSpace(values.Value[0]))
         {

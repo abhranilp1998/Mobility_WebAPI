@@ -147,6 +147,7 @@ public sealed class ClientAccessApiFactory : WebApplicationFactory<Program>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["DashboardApi:Authentication:Mode"] = "Development",
                 ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                 ["DashboardApi:TenantAccess:Enforced"] = "true",
                 ["DashboardApi:TenantAccess:Mode"] = "Client",

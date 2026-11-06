@@ -19,8 +19,14 @@ the first POC.
 
 ## Files
 
+- [authentication-rework.md](authentication-rework.md) — implemented legacy
+  account verification, SQL-backed bearer sessions, activation requirements,
+  and the next authorization step.
 - [contract.md](contract.md) — DTOs, endpoint behavior, compatibility,
   versioning, whitelist rules, and preserved business behavior.
+- [next-steps-functional-technical.md](next-steps-functional-technical.md) —
+  proposed authentication, authorization, transport, per-dashboard, and rollout
+  requirements for the next implementation phase.
 - [openapi-review.yaml](openapi-review.yaml) — reviewed design-time OpenAPI
   3.1 contract.
 - [database-schema.sql](database-schema.sql) — proposed SQL Server catalog
@@ -31,8 +37,9 @@ the first POC.
   runtime-generated snapshot of the implemented ASP.NET Core POC.
 
 The review OpenAPI remains the design reference. The generated document is the
-runtime source of truth for the in-memory POC and includes the same five route
-templates. Production data/action handlers remain outside this phase.
+snapshot of the implemented API, including bearer-session and rollout routes.
+The authentication implementation guide records the current permission and
+deployment limitations.
 
 ## Contract invariants
 

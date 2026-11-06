@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
+using Mobility.DynamicDashboard.Api.Authentication;
 using Mobility.DynamicDashboard.Api.Data.Legacy;
 using Mobility.DynamicDashboard.Api.Infrastructure;
 using Mobility.DynamicDashboard.Api.Models;
@@ -260,7 +261,8 @@ public sealed class DashboardsController(IDynamicDashboardService service)
 
     private string GetTenantId()
     {
-        return User.FindFirstValue(ClaimTypes.NameIdentifier)
+        return User.FindFirstValue(ApiSessionDefaults.CustomerClaim)
+            ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? throw new InvalidOperationException(
                 "The authorized dashboard tenant has no subject identifier.");
     }

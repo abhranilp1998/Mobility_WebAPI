@@ -62,7 +62,8 @@ public sealed class DashboardTenantAccessService(
     IOptionsMonitor<DashboardTenantAccessOptions> options,
     ILegacyDatabaseAliasProvider aliasProvider,
     IClientMembershipVerifier membershipVerifier,
-    ILogger<DashboardTenantAccessService> logger)
+    ILogger<DashboardTenantAccessService> logger,
+    SessionDashboardAccess? sessionAccess = null)
     : IDashboardTenantAccessService
 {
     public async Task<DashboardTenantAccessDecision> EvaluateAsync(
@@ -84,6 +85,17 @@ public sealed class DashboardTenantAccessService(
                 false,
                 100,
                 DashboardTenantAccessFailure.ConfigurationInvalid);
+        }
+
+        var session = sessionAccess?.Current;
+        if (session is not null)
+        {
+            var sessionRegistration = settings.Dashboards?.FirstOrDefault(item =>
+                item.Key.Equals(dashboardCode, StringComparison.OrdinalIgnoreCase)).Value;
+            var sessionAllowed = string.Equals(tenantId, session.CustomerId, StringComparison.Ordinal) &&
+                sessionRegistration?.Enabled != false && sessionAccess!.CanOpen(session, dashboardCode);
+            return new DashboardTenantAccessDecision(sessionAllowed, sessionRegistration?.DisplayOrder ?? 100,
+                sessionAllowed ? DashboardTenantAccessFailure.None : DashboardTenantAccessFailure.Forbidden);
         }
 
         if (!settings.Enforced)

@@ -21,6 +21,7 @@ public sealed class LiveDashboardApiFactory : WebApplicationFactory<Program>
             configuration.AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
+                    ["DashboardApi:Authentication:Mode"] = "Development",
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
                     ["DashboardApi:TenantAccess:Enforced"] = "false",
@@ -238,6 +239,7 @@ public sealed class MissingLiveConfigurationDashboardApiFactory
             configuration.AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
+                    ["DashboardApi:Authentication:Mode"] = "Development",
                     ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                     ["DashboardApi:Views:Enabled"] = "false",
                     ["DashboardApi:TenantAccess:Enforced"] = "false",

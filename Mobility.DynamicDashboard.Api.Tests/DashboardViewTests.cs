@@ -262,6 +262,7 @@ public sealed class DashboardViewApiFactory : WebApplicationFactory<Program>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["DashboardApi:Authentication:Mode"] = "Development",
                 ["DashboardApi:Authentication:DevelopmentBypassEnabled"] = "true",
                 ["DashboardApi:TenantAccess:Enforced"] = "false",
                 ["DashboardApi:CurrentOpp:Mode"] = "InMemory",
