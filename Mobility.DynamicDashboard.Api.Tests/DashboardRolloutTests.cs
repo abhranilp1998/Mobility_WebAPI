@@ -11,6 +11,69 @@ public sealed class DashboardRolloutTests
 {
     private const string Code = "CSPL_OPPORTUNITY_FOLLOW_UP";
 
+    [Fact]
+    public async Task MenuSetupCheck_ReportsMissingClientWithoutAuthenticationOrSql()
+    {
+        using var factory = new SessionApiFactory();
+        factory.Store.Available = false;
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync(Url("unknown-client", Code) + "&checkClientSetup=true");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("dashboard_client_not_configured", (await Json(response)).GetProperty("code").GetString());
+        Assert.Equal(0, factory.Legacy.Calls);
+    }
+
+    [Fact]
+    public async Task MenuSetupCheck_IntentionalNonEnrollmentRetainsLegacy()
+    {
+        using var factory = new SessionApiFactory();
+        factory.Store.Available = false;
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync(Url("pilot", Code) + "&checkClientSetup=true");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("legacy", (await Json(response)).GetProperty("mode").GetString());
+        Assert.Equal(0, factory.Legacy.Calls);
+    }
+
+    [Theory]
+    [InlineData("DashboardApi:Authentication:Legacy:Clients:pilot:BaseUrl")]
+    [InlineData("DashboardApi:Authentication:Legacy:Clients:pilot:DatabaseAlias")]
+    [InlineData("ConnectionStrings:DashboardSessions")]
+    public async Task MenuSetupCheck_ReportsMissingConnectionConfiguration(string key)
+    {
+        using var root = new SessionApiFactory();
+        using var enrolled = Enroll(root, "pilot", Code);
+        using var factory = enrolled.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(
+            (_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DashboardSessions"] = "unused-by-test-store",
+                [key] = ""
+            })));
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync(Url("pilot", Code) + "&checkClientSetup=true");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("dashboard_connection_not_configured", (await Json(response)).GetProperty("code").GetString());
+        Assert.Equal(0, root.Legacy.Calls);
+    }
+
+    [Fact]
+    public async Task MenuSetupCheck_ConfiguredEnrollmentDoesNotAuthenticateOrQuerySql()
+    {
+        using var root = new SessionApiFactory();
+        root.Store.Available = false;
+        using var enrolled = Enroll(root, "pilot", Code);
+        using var factory = enrolled.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(
+            (_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DashboardSessions"] = "unused-by-test-store"
+            })));
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync(Url("pilot", Code) + "&checkClientSetup=true");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("dynamic", (await Json(response)).GetProperty("mode").GetString());
+        Assert.Equal(0, root.Legacy.Calls);
+    }
+
     [Theory]
     [InlineData("unknown-client")]
     [InlineData("pilot")]

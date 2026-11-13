@@ -22,13 +22,15 @@ public sealed class DashboardRolloutController(DashboardRolloutService rollout) 
         string clientCode,
         [FromQuery, Required, StringLength(100), RegularExpression("^[A-Z0-9_]{3,100}$")]
         string dashboardCode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool checkClientSetup = false)
     {
-        try { return Ok(await rollout.ResolveAsync(clientCode, dashboardCode, cancellationToken)); }
+        try { return Ok(await rollout.ResolveAsync(clientCode, dashboardCode, cancellationToken, checkClientSetup)); }
         catch (DashboardDataSourceException failure)
         {
             return new ObjectResult(DashboardProblemFactory.Create(HttpContext,
-                failure.StatusCode, failure.Code, failure.Title, retryable: failure.Retryable))
+                failure.StatusCode, failure.Code, failure.Title,
+                detail: failure.Message, retryable: failure.Retryable))
             {
                 StatusCode = failure.StatusCode,
                 ContentTypes = { "application/problem+json" }

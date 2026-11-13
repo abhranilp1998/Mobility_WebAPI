@@ -29,19 +29,43 @@ public sealed record DashboardRolloutDecision(string Mode, string Reason);
 public sealed class DashboardRolloutService(
     IOptionsMonitor<DashboardRolloutOptions> rollout,
     IOptionsMonitor<LegacyAuthenticationOptions> authentication,
-    IDashboardRepository repository)
+    IDashboardRepository repository,
+    IConfiguration configuration)
 {
     public async Task<DashboardRolloutDecision> ResolveAsync(string clientCode,
-        string dashboardCode, CancellationToken cancellationToken)
+        string dashboardCode, CancellationToken cancellationToken,
+        bool checkClientSetup = false)
     {
+        var client = authentication.CurrentValue.Clients?.FirstOrDefault(item =>
+            item.Key.Equals(clientCode, StringComparison.OrdinalIgnoreCase)).Value;
+        if (checkClientSetup && client is null)
+            throw ClientSetupMissing("dashboard_client_not_configured");
+
         var dashboards = rollout.CurrentValue.Clients?.FirstOrDefault(item =>
             item.Key.Equals(clientCode, StringComparison.OrdinalIgnoreCase)).Value;
         if (dashboards?.Any(code => string.Equals(code?.Trim(), dashboardCode,
                 StringComparison.OrdinalIgnoreCase)) != true)
             return new DashboardRolloutDecision("legacy", "not_enrolled");
 
-        var registered = authentication.CurrentValue.Clients?.Any(item =>
-            item.Key.Equals(clientCode, StringComparison.OrdinalIgnoreCase) && item.Value is not null) == true;
+        if (checkClientSetup)
+        {
+            if (client is null || string.IsNullOrWhiteSpace(client.DatabaseAlias) ||
+                !System.Text.RegularExpressions.Regex.IsMatch(client.DatabaseAlias,
+                    "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$") ||
+                !Uri.TryCreate(client.BaseUrl, UriKind.Absolute, out var uri) ||
+                uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 ||
+                uri.Query.Length > 0 || uri.Fragment.Length > 0)
+                throw ClientSetupMissing("dashboard_connection_not_configured");
+
+            var mode = configuration["DashboardApi:Authentication:Mode"] ?? "Session";
+            var connectionName = configuration[
+                "DashboardApi:Authentication:Sessions:ConnectionStringName"] ?? "DashboardSessions";
+            if (mode.Equals("Session", StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrWhiteSpace(configuration.GetConnectionString(connectionName)))
+                throw ClientSetupMissing("dashboard_connection_not_configured");
+        }
+
+        var registered = client is not null;
         var definitions = await repository.GetDefinitionsAsync(cancellationToken);
         if (!registered || !definitions.Any(item => item.DashboardCode.Equals(
                 dashboardCode, StringComparison.OrdinalIgnoreCase)))
@@ -51,4 +75,8 @@ public sealed class DashboardRolloutService(
 
         return new DashboardRolloutDecision("dynamic", "enrolled");
     }
+
+    private static DashboardDataSourceException ClientSetupMissing(string code) =>
+        new(503, code, "Client setup required.",
+            "Contact developer to add/configure this client for dynamic dashboards.");
 }

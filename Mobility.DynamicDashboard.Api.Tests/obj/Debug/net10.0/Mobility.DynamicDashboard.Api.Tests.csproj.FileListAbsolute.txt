@@ -321,7 +321,6 @@
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/refs/System.Xml.XPath.XDocument.dll
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/refs/WindowsBase.dll
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/Dapper.dll
-/Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/Microsoft.AspNetCore.Mvc.Testing.dll
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/Microsoft.AspNetCore.OpenApi.dll
 /Users/abhranilpaul/Documents/WebAPIs/Mobility/Mobility.DynamicDashboard.Api.Tests/bin/Debug/net10.0/Microsoft.AspNetCore.TestHost.dll

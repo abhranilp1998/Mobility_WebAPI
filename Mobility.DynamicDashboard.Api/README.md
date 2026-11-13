@@ -11,7 +11,21 @@ user list is empty; explicit user lists restrict access. Unconfigured screens
 remain on the legacy route through the rollout lookup.
 An anonymous `/api/v1/dashboards/rollout` lookup now distinguishes migration
 enrollment from authentication and permission failures. The Flutter consumer
-integration for this lookup and bearer sessions is still pending.
+integration uses bearer sessions and optional menu `dashboardCode` routing.
+
+Menus with a supported `dashboardCode` request
+`GET /api/v1/dashboards/rollout?clientCode=<client>&dashboardCode=<code>&checkClientSetup=true`.
+The optional flag defaults to false for existing consumers. With it enabled,
+an unregistered client returns 503 `dashboard_client_not_configured`.
+A registered client whose dashboard is intentionally not enrolled still returns
+`legacy/not_enrolled`, without authentication or SQL access. For enrolled
+dashboards, a missing/invalid client ASMX destination or database alias, or a
+missing configured Session-mode SQL connection string, returns 503
+`dashboard_connection_not_configured`. The Flutter consumer uses these setup
+codes to open the existing legacy screen by its original menu ID and shows only
+a non-blocking contact-developer notice. Missing API setup must not block an
+available ERP screen. No connection values are returned. This checks configuration
+presence, not SQL or ERP connectivity, and never grants protected API access.
 
 The API is definition-driven: the client first loads a dashboard definition,
 then uses that definition to render filters, grouping, cards, summaries,
