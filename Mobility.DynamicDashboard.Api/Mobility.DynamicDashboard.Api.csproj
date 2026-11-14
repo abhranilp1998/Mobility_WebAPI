@@ -27,9 +27,9 @@
 
   <!--
     A normal Rider/dotnet publish must be deployable as-is. The ignored local
-    server settings file contains the real connection value, is required at
-    publish time, and is copied into the output only after the Web SDK has
-    completed its normal publish pipeline.
+    server settings file contains the real connection value and is required at
+    publish time. Copy every project-local appsettings file unchanged after the
+    Web SDK has completed its normal publish pipeline.
   -->
   <Target Name="RequireServerSettingsForPublish" BeforeTargets="Publish">
     <Error
@@ -37,12 +37,16 @@
       Text="Publishing requires Mobility.DynamicDashboard.Api/appsettings.Server.json. Restore the local server settings file before publishing." />
   </Target>
 
-  <Target Name="CopyServerSettingsToPublish"
+  <Target Name="PreserveAppSettingsInPublish"
           AfterTargets="Publish"
           DependsOnTargets="RequireServerSettingsForPublish">
+    <ItemGroup>
+      <AppSettingsToPreserve Include="$(MSBuildProjectDirectory)/appsettings*.json" />
+    </ItemGroup>
     <Copy
-      SourceFiles="$(MSBuildProjectDirectory)/appsettings.Server.json"
-      DestinationFolder="$(PublishDir)" />
+      SourceFiles="@(AppSettingsToPreserve)"
+      DestinationFolder="$(PublishDir)"
+      SkipUnchangedFiles="false" />
   </Target>
 
 </Project>

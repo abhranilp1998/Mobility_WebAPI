@@ -49,7 +49,10 @@ public sealed class DashboardViewResolver(
         }
 
         var original = baseline.Definition;
-        var grouping = profile.Grouping is null
+        var layout = profile.Layout ?? original.Layout;
+        var grouping = layout == "cardList"
+            ? null
+            : profile.Grouping is null
             ? original.Grouping
             : new DashboardGrouping(
                 profile.Grouping.Field,
@@ -62,7 +65,7 @@ public sealed class DashboardViewResolver(
                     original.Grouping?.ShowCount ?? true);
         var selectedDefinition = original with
         {
-            Layout = profile.Layout ?? original.Layout,
+            Layout = layout,
             Grouping = grouping,
             Filters = profile.FilterKeys is null
                 ? original.Filters

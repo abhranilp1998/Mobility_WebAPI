@@ -168,10 +168,17 @@ private addresses directly.
 
 The project requires the ignored local
 `Mobility.DynamicDashboard.Api/appsettings.Server.json` during every publish
-and automatically copies it into that output. Publishing fails rather than
+and automatically copies every project-local `appsettings*.json` file into
+that output unchanged, including Server, Development, and Production settings.
+Publishing fails rather than
 creating an incomplete folder if this file is missing. The file already holds
 the working `anupalan_live` connection used by this deployment; do not edit the
 published JSON or `web.config` on the server.
+
+For a ZIP with the same settings-preservation checks, run
+`./scripts/publish-windows-iis.sh` from the repository root. Its package verifier
+compares every included appsettings file byte-for-byte with the current project
+file; it does not replace settings with example values or fixed server addresses.
 
 The committed `web.config` still selects the ASP.NET Core Development
 environment. That environment no longer selects the identity bypass by itself:
@@ -667,6 +674,13 @@ widgets, or navigation behavior. Give each changed profile a new semantic
 `DefinitionVersion`; catalog, definition, rows, and filter-option responses
 then agree on the selected version. Invalid profiles or assignments fail
 validation and make `/health/ready` unhealthy.
+
+`Layout: "cardList"` explicitly selects plain cards and clears inherited
+grouping; no `Grouping` block is needed. Group headers and collapse controls
+apply only to `groupedCardList` with a grouping definition. Task Status supports
+the filter keys `customer`, `classification`, and `search`; `salesPerson` is not
+a declared Task Status filter. A profile must also be selected through a
+company or user assignment before it changes the returned definition.
 
 After the API version containing this resolver is deployed, `Views` uses
 `IOptionsMonitor` and reloads from configuration. Development uses

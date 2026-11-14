@@ -49,6 +49,7 @@ public sealed class DashboardViewTests
         Assert.Equal("1.0.2", otherDefinition.GetProperty("definitionVersion").GetString());
         Assert.Equal("cardList", otherDefinition.GetProperty("definition")
             .GetProperty("layout").GetString());
+        Assert.False(otherDefinition.GetProperty("definition").TryGetProperty("grouping", out _));
         var otherCardFields = otherDefinition.GetProperty("definition")
             .GetProperty("card").GetProperty("fields").EnumerateArray().ToArray();
         Assert.Equal("PEOPLE", otherCardFields[0].GetProperty("code").GetString());
@@ -164,6 +165,52 @@ public sealed class DashboardViewTests
         Assert.Equal("1.0.2", refreshed.GetProperty("definitionVersion").GetString());
         Assert.Equal("cardList", refreshed.GetProperty("definition")
             .GetProperty("layout").GetString());
+    }
+
+    [Fact]
+    public async Task TaskStatusCardListProfile_RemovesInheritedGroupingAndUsesDeclaredFilters()
+    {
+        const string taskCode = InMemoryDashboardRepository.TaskStatusCode;
+        await using var root = new DashboardViewApiFactory();
+        await using var factory = root.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, configuration) =>
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["DashboardApi:Views:Profiles:taskstatus-default-view:DashboardCode"] = taskCode,
+                    ["DashboardApi:Views:Profiles:taskstatus-default-view:DefinitionVersion"] = "1.1.3",
+                    ["DashboardApi:Views:Profiles:taskstatus-default-view:Layout"] = "cardList",
+                    ["DashboardApi:Views:Profiles:taskstatus-default-view:FilterKeys:0"] = "customer",
+                    ["DashboardApi:Views:Profiles:taskstatus-default-view:FilterKeys:1"] = "classification",
+                    ["DashboardApi:Views:Profiles:taskstatus-default-view:FilterKeys:2"] = "search",
+                    [$"DashboardApi:Views:CompanyAssignments:company_b:{taskCode}"] = "taskstatus-default-view"
+                })));
+        using var client = Client(factory, SecondUser, "company_b");
+        using var response = await client.GetAsync(
+            $"/api/v1/dashboards/{taskCode}/definition?platform=web&rendererVersion=1&{Capabilities}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var definition = json.RootElement.GetProperty("definition");
+        Assert.Equal("1.1.3", json.RootElement.GetProperty("definitionVersion").GetString());
+        Assert.Equal("cardList", definition.GetProperty("layout").GetString());
+        Assert.False(definition.TryGetProperty("grouping", out _));
+        Assert.Equal(new[] { "customer", "classification", "search" },
+            definition.GetProperty("filters").EnumerateArray()
+                .Select(item => item.GetProperty("key").GetString()).ToArray());
+
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/v1/dashboards/{taskCode}/rows");
+        request.Headers.Add("X-Dashboard-Definition-Version", "1.1.3");
+        request.Content = JsonContent.Create(new
+        {
+            filters = new Dictionary<string, string>(), sort = Array.Empty<object>(),
+            context = new { actingUserId = SecondUser, platform = "web", rendererVersion = 1,
+                capabilities = new[] { "groupedCardList" } },
+            page = new { number = 1, size = 50 }
+        });
+        using var rows = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, rows.StatusCode);
+        using var rowJson = JsonDocument.Parse(await rows.Content.ReadAsStringAsync());
+        Assert.NotEmpty(rowJson.RootElement.GetProperty("rows").EnumerateArray());
     }
 
     [Fact]

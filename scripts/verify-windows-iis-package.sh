@@ -7,14 +7,15 @@ if [[ $# -ne 1 ]]; then
 fi
 
 zip_path="$1"
-expected_legacy_base_url="${EXPECTED_LEGACY_BASE_URL:-http://192.168.192.196:8087}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_directory="$(cd "$script_dir/../Mobility.DynamicDashboard.Api" && pwd)"
 
 if [[ ! -f "$zip_path" ]]; then
   printf 'Package does not exist: %s\n' "$zip_path" >&2
   exit 1
 fi
 
-for required_command in unzip jq grep; do
+for required_command in unzip jq grep cmp; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     printf 'Required command is unavailable: %s\n' "$required_command" >&2
     exit 1
@@ -27,33 +28,29 @@ for required_entry in \
   "MobilityDashboardApi/Mobility.DynamicDashboard.Api.dll" \
   "MobilityDashboardApi/web.config" \
   "MobilityDashboardApi/appsettings.json" \
-  "MobilityDashboardApi/appsettings.Development.json"; do
+  "MobilityDashboardApi/appsettings.Development.json" \
+  "MobilityDashboardApi/appsettings.Server.json"; do
   if ! grep -Fxq "$required_entry" <<<"$archive_entries"; then
     printf 'Required package entry is missing: %s\n' "$required_entry" >&2
     exit 1
   fi
 done
 
-for configuration_entry in \
-  "MobilityDashboardApi/appsettings.json" \
-  "MobilityDashboardApi/appsettings.Development.json"; do
+for configuration_file in "$project_directory"/appsettings*.json; do
+  configuration_name="${configuration_file##*/}"
+  configuration_entry="MobilityDashboardApi/$configuration_name"
+  if ! grep -Fxq "$configuration_entry" <<<"$archive_entries"; then
+    printf 'Required package entry is missing: %s\n' "$configuration_entry" >&2
+    exit 1
+  fi
   unzip -p "$zip_path" "$configuration_entry" | jq empty
+  if ! unzip -p "$zip_path" "$configuration_entry" | \
+     cmp -s "$configuration_file" -; then
+    printf 'Packaged settings differ from the current project file: %s\n' \
+      "$configuration_name" >&2
+    exit 1
+  fi
 done
-
-development_configuration="$(
-  unzip -p "$zip_path" \
-    "MobilityDashboardApi/appsettings.Development.json"
-)"
-
-if ! jq -e --arg expected "$expected_legacy_base_url" '
-    .DashboardApi.CurrentOpp.Legacy.BaseUrl == $expected and
-    .DashboardApi.TaskStatus.Legacy.BaseUrl == $expected and
-    .DashboardApi.WorkDone.Legacy.BaseUrl == $expected
-  ' <<<"$development_configuration" >/dev/null; then
-  printf 'Development legacy BaseUrl must be %s for all live dashboards.\n' \
-    "$expected_legacy_base_url" >&2
-  exit 1
-fi
 
 web_configuration="$(
   unzip -p "$zip_path" "MobilityDashboardApi/web.config"
@@ -74,3 +71,4 @@ if unzip -p "$zip_path" "MobilityDashboardApi/appsettings.json" | jq -e '
 fi
 
 printf 'Verified Windows IIS package: %s\n' "$zip_path"
+printf '%s\n' 'All current appsettings files are preserved byte-for-byte, including appsettings.Server.json.'

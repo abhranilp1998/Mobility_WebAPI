@@ -63,4 +63,4 @@ ditto -c -k --sequesterRsrc --keepParent "$publish_directory" "$zip_path"
 
 printf 'Windows IIS folder: %s\n' "$publish_directory"
 printf 'Windows IIS ZIP: %s\n' "$zip_path"
-printf '%s\n' 'Server secret file is intentionally not included.'
+printf '%s\n' 'All current appsettings files are included unchanged, including appsettings.Server.json.'
